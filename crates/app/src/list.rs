@@ -28,10 +28,13 @@ fn bucket_label(bucket: Bucket, start: NaiveDate) -> String {
     }
 }
 
+/// The time column's width; just enough for "12:00 PM". Longer labels use two lines.
+const WHEN_WIDTH: f32 = 90.0;
+
 fn when(bucket: Bucket, occ: &Occurrence) -> String {
     if occ.end.date() > occ.start.date() + TimeDelta::days(1) {
         return format!(
-            "{} – {}",
+            "{} –\n{}",
             occ.start.format("%b %-d"),
             occ.end.format("%b %-d")
         );
@@ -39,7 +42,7 @@ fn when(bucket: Bucket, occ: &Occurrence) -> String {
     let time = occ.start.format("%-I:%M %p");
     match bucket {
         Bucket::Day => time.to_string(),
-        _ => format!("{} · {time}", occ.start.format("%a %-d")),
+        _ => format!("{}\n{time}", occ.start.format("%a %-d")),
     }
 }
 
@@ -159,9 +162,13 @@ fn occurrence<'a>(
     }
 
     ui::card(
-        row![ui::bold(when(app.bucket, occ)).width(130), info, actions,]
-            .spacing(12)
-            .align_y(Center),
+        row![
+            ui::bold(when(app.bucket, occ)).width(WHEN_WIDTH),
+            info,
+            actions,
+        ]
+        .spacing(12)
+        .align_y(Center),
     )
 }
 
@@ -319,12 +326,12 @@ mod tests {
             start,
             end: start + TimeDelta::days(4),
         };
-        assert_eq!(when(Bucket::Day, &occ), "Jul 22 – Jul 26");
+        assert_eq!(when(Bucket::Day, &occ), "Jul 22 –\nJul 26");
         let short = Occurrence {
             end: start + TimeDelta::hours(2),
             ..occ
         };
         assert_eq!(when(Bucket::Day, &short), "9:00 AM");
-        assert_eq!(when(Bucket::Week, &short), "Thu 22 · 9:00 AM");
+        assert_eq!(when(Bucket::Week, &short), "Thu 22\n9:00 AM");
     }
 }
