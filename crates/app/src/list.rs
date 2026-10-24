@@ -55,7 +55,7 @@ fn link_label(kind: &str) -> String {
 fn link_buttons(group: &Group) -> impl Iterator<Item = Element<'_, Message>> {
     group.links.iter().map(|l| {
         button(text(link_label(&l.kind)).size(13))
-            .style(button::secondary)
+            .style(ui::gray)
             .on_press(Message::OpenUrl(l.url.clone()))
             .into()
     })
@@ -63,7 +63,7 @@ fn link_buttons(group: &Group) -> impl Iterator<Item = Element<'_, Message>> {
 
 pub fn events(app: &App) -> Element<'_, Message> {
     let header = row![
-        button("Add event").on_press(Message::NewEvent(None)),
+        button("Add Event").on_press(Message::NewEvent(None)),
         space::horizontal(),
         pick_list(Bucket::ALL, Some(app.bucket), Message::Bucket),
         pick_list(Horizon::ALL, Some(app.horizon), Message::Horizon),
@@ -144,7 +144,7 @@ fn occurrence<'a>(
     if !event.url.is_empty() {
         actions = actions.push(
             button(text("Details").size(13))
-                .style(button::secondary)
+                .style(ui::gray)
                 .on_press(Message::OpenUrl(event.url.clone())),
         );
     } else if let Some(g) = group {
@@ -172,7 +172,7 @@ pub fn groups(app: &App) -> Element<'_, Message> {
         .filter(|g| app.filters.group(g, &app.hidden))
         .collect();
 
-    let header = row![button("Add group").on_press(Message::NewGroup)].align_y(Center);
+    let header = row![button("Add Group").on_press(Message::NewGroup)].align_y(Center);
 
     let list: Element<'_, Message> = if visible.is_empty() {
         ui::muted("No groups match your search.").into()

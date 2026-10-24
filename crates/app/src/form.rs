@@ -317,8 +317,8 @@ impl GroupForm {
         }))
         .spacing(6)
         .push(
-            button("+ Add link")
-                .style(button::secondary)
+            button("+ Add Link")
+                .style(ui::gray)
                 .on_press(Message::Form(Field::AddLink)),
         );
 
@@ -359,7 +359,7 @@ impl GroupForm {
                         .on_input(|s| Message::Form(Field::Verified(s)))
                         .width(160),
                     button("Today")
-                        .style(button::secondary)
+                        .style(ui::gray)
                         .on_press(Message::Form(Field::VerifiedToday)),
                 ]
                 .spacing(8)
@@ -694,14 +694,11 @@ impl Editor {
 
     pub fn view<'a>(&'a self, app: &'a App) -> Element<'a, Message> {
         let common = self.common();
-        let noun = match self {
-            Editor::Group(_) => "group",
-            Editor::Event(_) => "event",
-        };
-        let verb = if common.is_new { "New" } else { "Edit" };
-        let target = match common.source {
-            Source::Defaults => "Saved to the curated defaults",
-            Source::User => "Saved to your personal data",
+        let save = match (self, common.is_new) {
+            (Editor::Event(_), true) => "Create Event",
+            (Editor::Event(_), false) => "Update Event",
+            (Editor::Group(_), true) => "Create Group",
+            (Editor::Group(_), false) => "Update Group",
         };
 
         let fields = match self {
@@ -710,12 +707,8 @@ impl Editor {
         };
 
         let mut actions = row![
-            button("Save")
-                .style(button::primary)
-                .on_press(Message::Save),
-            button("Cancel")
-                .style(button::secondary)
-                .on_press(Message::Cancel),
+            button(save).style(button::primary).on_press(Message::Save),
+            button("Cancel").style(ui::gray).on_press(Message::Cancel),
             space::horizontal(),
         ]
         .spacing(8)
@@ -725,7 +718,7 @@ impl Editor {
                 actions = actions.push(text("Delete permanently?").size(14));
             }
             let label = if common.confirm_delete {
-                "Yes, delete"
+                "Yes, Delete"
             } else {
                 "Delete"
             };
@@ -736,11 +729,7 @@ impl Editor {
             );
         }
 
-        let mut form =
-            column![column![ui::heading(format!("{verb} {noun}")), ui::muted(target)].spacing(2)]
-                .spacing(14)
-                .padding([0, 12]);
-        form = form.push(fields.spacing(14));
+        let mut form = fields.spacing(14).padding([0, 12]);
         if let Some(err) = &common.error {
             form = form.push(ui::banner(err, true));
         }

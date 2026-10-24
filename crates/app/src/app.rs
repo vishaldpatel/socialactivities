@@ -412,7 +412,7 @@ impl App {
                 .style(if self.tab == tab && self.editor.is_none() {
                     button::primary
                 } else {
-                    button::secondary
+                    ui::gray
                 })
                 .on_press(Message::Tab(tab))
         };
@@ -465,7 +465,7 @@ impl App {
                 .on_toggle(Message::ShowHidden)
                 .size(16)
                 .text_size(14),
-            button("Clear search")
+            button("Clear Search")
                 .style(button::text)
                 .on_press(Message::ClearFilters),
             space::vertical(),

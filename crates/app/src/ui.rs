@@ -18,9 +18,22 @@ pub fn heading<'a>(s: impl text::IntoFragment<'a>) -> Text<'a> {
     bold(s).size(20)
 }
 
+/// Secondary text: the theme's strongest background shade, blended 40% toward
+/// the normal text color so it stays readable while still receding.
 fn muted_style(theme: &Theme) -> text::Style {
+    let palette = theme.extended_palette();
+    let (from, to) = (
+        palette.background.strongest.color,
+        palette.background.base.text,
+    );
+    let mix = |a: f32, b: f32| a + (b - a) * 0.4;
     text::Style {
-        color: Some(theme.extended_palette().background.strongest.color),
+        color: Some(Color {
+            r: mix(from.r, to.r),
+            g: mix(from.g, to.g),
+            b: mix(from.b, to.b),
+            a: 1.0,
+        }),
     }
 }
 
@@ -80,6 +93,30 @@ pub fn rich_muted<'a, M: 'a>(spans: Vec<Span<'a, (), Font>>) -> Rich<'a, (), M> 
     rich_text(spans).size(13).style(muted_style)
 }
 
+/// Gray buttons: Iced's `secondary` puts dark text on mid-gray, which is hard
+/// to read in the dark theme, so this uses a darker gray with the theme's light
+/// text instead.
+pub fn gray(theme: &Theme, status: button::Status) -> button::Style {
+    let palette = theme.extended_palette();
+    let pair = match status {
+        button::Status::Hovered | button::Status::Pressed => palette.background.strongest,
+        _ => palette.background.strong,
+    };
+    let style = button::Style {
+        background: Some(pair.color.into()),
+        text_color: palette.background.base.text,
+        border: iced::border::rounded(2),
+        ..button::Style::default()
+    };
+    match status {
+        button::Status::Disabled => button::Style {
+            text_color: palette.background.strongest.color,
+            ..style
+        },
+        _ => style,
+    }
+}
+
 /// A clickable tag chip; `selected` when it's part of the current search.
 pub fn tag<'a, M: Clone + 'a>(label: &str, selected: bool, on_press: M) -> Element<'a, M> {
     button(text(label.to_string()).size(12))
@@ -88,7 +125,7 @@ pub fn tag<'a, M: Clone + 'a>(label: &str, selected: bool, on_press: M) -> Eleme
             let base = if selected {
                 button::primary(theme, status)
             } else {
-                button::secondary(theme, status)
+                gray(theme, status)
             };
             button::Style {
                 border: iced::border::rounded(10),
