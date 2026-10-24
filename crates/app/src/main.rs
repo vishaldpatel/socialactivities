@@ -17,6 +17,9 @@ usage: sdsa [--admin] [--defaults PATH] [--user PATH]
   --defaults PATH  curated defaults database (also: SDSA_DEFAULTS)
   --user PATH      your personal database (default: platform data directory)";
 
+/// Draws the whole interface this much larger than Iced's defaults.
+const SCALE: f32 = 1.25;
+
 struct Args {
     admin: bool,
     defaults: Option<PathBuf>,
@@ -101,6 +104,7 @@ fn main() -> iced::Result {
         app::App::view,
     )
     .title(app::App::title)
-    .window_size((1100.0, 760.0))
+    .scale_factor(|_| SCALE)
+    .window_size((1100.0 * SCALE, 760.0 * SCALE))
     .run()
 }
