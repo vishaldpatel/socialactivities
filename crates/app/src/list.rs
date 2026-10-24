@@ -173,13 +173,32 @@ pub fn groups(app: &App) -> Element<'_, Message> {
     let visible: Vec<&Group> = app
         .groups
         .iter()
-        .filter(|g| app.filters.group(g, &app.hidden))
+        .filter(|g| app.filters.group(g, &app.hidden, app.viewing_hidden))
         .collect();
 
-    let header = row![button("Add Group").on_press(Message::NewGroup)].align_y(Center);
+    let mut header = row![button("Add Group").on_press(Message::NewGroup)]
+        .spacing(8)
+        .align_y(Center);
+    let hidden = app.hidden_count();
+    if hidden > 0 {
+        header = header.push(
+            button(text(format!("Hidden ({hidden})")))
+                .style(if app.viewing_hidden {
+                    button::primary
+                } else {
+                    ui::gray
+                })
+                .on_press(Message::ViewHidden(!app.viewing_hidden)),
+        );
+    }
 
     let list: Element<'_, Message> = if visible.is_empty() {
-        ui::muted("No groups match your search.").into()
+        ui::muted(if app.viewing_hidden {
+            "No hidden groups match your search."
+        } else {
+            "No groups match your search."
+        })
+        .into()
     } else {
         Column::with_children(visible.into_iter().map(|g| group_card(app, g)))
             .spacing(10)

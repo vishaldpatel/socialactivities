@@ -73,7 +73,6 @@ pub struct Filters {
     pub categories: HashSet<&'static str>,
     /// Free-form tags; a record must have all of them.
     pub tags: BTreeSet<String>,
-    pub show_hidden: bool,
 }
 
 impl Filters {
@@ -96,8 +95,10 @@ impl Filters {
             .all(|want| tags.clone().into_iter().any(|t| t == want))
     }
 
-    pub fn group(&self, g: &Group, hidden: &HashSet<String>) -> bool {
-        (self.show_hidden || !hidden.contains(&g.id))
+    /// Whether `g` matches, among hidden groups if `want_hidden`, otherwise
+    /// among visible ones.
+    pub fn group(&self, g: &Group, hidden: &HashSet<String>, want_hidden: bool) -> bool {
+        hidden.contains(&g.id) == want_hidden
             && self.area.contains(&g.neighborhood)
             && self.matches_categories(&g.categories)
             && self.matches_tags(&g.tags)
@@ -108,7 +109,7 @@ impl Filters {
         let group_categories = group.into_iter().flat_map(|g| &g.categories);
         let group_tags = group.into_iter().flat_map(|g| &g.tags);
         let group_name = group.map_or("", |g| g.name.as_str());
-        (self.show_hidden || group.is_none_or(|g| !hidden.contains(&g.id)))
+        group.is_none_or(|g| !hidden.contains(&g.id))
             && self.area.contains(&e.neighborhood)
             && self.matches_categories(e.categories.iter().chain(group_categories))
             && self.matches_tags(e.tags.iter().chain(group_tags))
@@ -125,7 +126,8 @@ pub enum Message {
     Noop,
     Category(&'static str, bool),
     ToggleTag(String),
-    ShowHidden(bool),
+    /// Switches the Groups panel between visible and hidden groups.
+    ViewHidden(bool),
     ClearFilters,
     Bucket(Bucket),
     Horizon(Horizon),
@@ -156,6 +158,8 @@ pub struct App {
     pub filters: Filters,
     pub bucket: Bucket,
     pub horizon: Horizon,
+    /// The Groups panel is listing hidden groups instead of visible ones.
+    pub viewing_hidden: bool,
     tab: Tab,
     editor: Option<Editor>,
     /// Message and whether it is an error.
@@ -177,6 +181,7 @@ impl App {
             filters: Filters::default(),
             bucket: Bucket::Day,
             horizon: Horizon::Month,
+            viewing_hidden: false,
             tab: Tab::Events,
             editor: None,
             status,
@@ -187,9 +192,9 @@ impl App {
 
     pub fn title(&self) -> String {
         if self.store.is_admin() {
-            "SD Social Activities — Admin".into()
+            "Social Activities — Admin".into()
         } else {
-            "SD Social Activities".into()
+            "Social Activities!".into()
         }
     }
 
@@ -199,6 +204,15 @@ impl App {
 
     pub fn can_edit(&self, source: Source) -> bool {
         self.store.can_edit(source)
+    }
+
+    /// Hidden groups that still exist; the hidden list can outlive a group
+    /// removed from the curated defaults.
+    pub fn hidden_count(&self) -> usize {
+        self.groups
+            .iter()
+            .filter(|g| self.hidden.contains(&g.id))
+            .count()
     }
 
     pub fn group(&self, id: Option<&str>) -> Option<&Group> {
@@ -232,6 +246,10 @@ impl App {
                 self.groups = groups;
                 self.events = events;
                 self.hidden = hidden;
+                // Leave the hidden view once the last group is unhidden.
+                if self.hidden_count() == 0 {
+                    self.viewing_hidden = false;
+                }
                 let in_use: BTreeSet<&String> = (self.groups.iter().flat_map(|g| &g.tags))
                     .chain(self.events.iter().flat_map(|e| &e.tags))
                     .collect();
@@ -255,7 +273,9 @@ impl App {
             Message::Tab(tab) => {
                 self.tab = tab;
                 self.editor = None;
+                self.viewing_hidden = false;
             }
+            Message::ViewHidden(on) => self.viewing_hidden = on,
             Message::Search(s) => self.filters.search = s,
             Message::Area(area) => self.filters.area = area,
             Message::Noop => {}
@@ -271,7 +291,6 @@ impl App {
                     self.filters.tags.insert(tag);
                 }
             }
-            Message::ShowHidden(on) => self.filters.show_hidden = on,
             Message::ClearFilters => self.filters = Filters::default(),
             Message::Bucket(b) => self.bucket = b,
             Message::Horizon(h) => {
@@ -406,6 +425,9 @@ impl App {
     }
 
     fn sidebar(&self) -> Element<'_, Message> {
+        // Extra space above each sidebar section, on top of the column spacing.
+        const SECTION_GAP: f32 = 6.0;
+
         let tab = |label, tab| {
             button(label)
                 .width(Fill)
@@ -417,7 +439,7 @@ impl App {
                 .on_press(Message::Tab(tab))
         };
 
-        let mut header = column![ui::heading("SD Social")].spacing(4);
+        let mut header = column![ui::heading("Social Activities!")].spacing(4);
         if self.is_admin() {
             header = header.push(ui::chip("Admin: editing curated defaults"));
         }
@@ -456,15 +478,12 @@ impl App {
             ui::bold("Search"),
             text_input("Search…", &self.filters.search).on_input(Message::Search),
             location::area_picker(self.filters.area),
+            space::vertical().height(SECTION_GAP),
             ui::muted("Categories"),
             categories,
+            space::vertical().height(SECTION_GAP),
             ui::muted("Tags"),
             tags,
-            checkbox(self.filters.show_hidden)
-                .label("Show hidden groups")
-                .on_toggle(Message::ShowHidden)
-                .size(16)
-                .text_size(14),
             button("Clear Search")
                 .style(button::text)
                 .on_press(Message::ClearFilters),
@@ -483,6 +502,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn hidden_and_visible_views_split_groups() {
+        let shown = Group::new(Source::User);
+        let hidden_group = Group::new(Source::User);
+        let hidden = HashSet::from([hidden_group.id.clone()]);
+        let filters = Filters::default();
+        assert!(filters.group(&shown, &hidden, false));
+        assert!(!filters.group(&shown, &hidden, true));
+        assert!(filters.group(&hidden_group, &hidden, true));
+        assert!(!filters.group(&hidden_group, &hidden, false));
+    }
+
+    #[test]
     fn tags_must_all_match_and_include_group_tags() {
         let mut group = Group::new(Source::User);
         group.tags = vec!["beginner friendly".into()];
@@ -495,7 +526,7 @@ mod tests {
         assert!(filters.event(&event, Some(&group), &hidden));
         filters.tags.insert("night".into());
         assert!(filters.event(&event, Some(&group), &hidden));
-        assert!(!filters.group(&group, &hidden));
+        assert!(!filters.group(&group, &hidden, false));
         filters.tags.insert("dogs".into());
         assert!(!filters.event(&event, Some(&group), &hidden));
     }
