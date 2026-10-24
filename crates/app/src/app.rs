@@ -2,8 +2,9 @@ use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use chrono::{NaiveTime, TimeDelta};
-use iced::widget::{button, checkbox, column, row, rule, scrollable, space, text_input};
-use iced::{Element, Fill, Task};
+use iced::widget::operation;
+use iced::widget::{button, column, row, rule, scrollable, space, text_input};
+use iced::{Element, Fill, Subscription, Task, keyboard};
 use sdsa_core::catalog::CATEGORIES;
 use sdsa_core::recurrence;
 use sdsa_core::store::Installed;
@@ -12,7 +13,19 @@ use sdsa_core::{Event, Group, ListFile, ListInfo, Occurrence, Store};
 use crate::form::{self, Editor, Record};
 use crate::lists::{self, Lists, UpdateState};
 use crate::location::{self, Area};
+use crate::{calendar, focus, focusable};
 use crate::{list, search, ui};
+
+/// The scroll area of whichever panel is showing on the right.
+pub const MAIN_SCROLL: &str = "main-scroll";
+/// The sidebar's search box, for Ctrl+S.
+pub const SEARCH_INPUT: &str = "search";
+/// The first button of each panel on the right, for Ctrl+R.
+pub const RESULTS_START: &str = "results-start";
+
+/// How far the arrow keys and Page Up/Down scroll the panel on the right.
+const LINE_SCROLL: f32 = 48.0;
+const PAGE_SCROLL: f32 = 400.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -154,6 +167,10 @@ pub enum Message {
     Cancel,
     Delete,
     DismissStatus,
+    /// A key press no widget used, for shortcuts and Tab.
+    Key(keyboard::Key, keyboard::Modifiers),
+    /// Scrolls the panel on the right by this much (negative is up).
+    Scroll(f32),
 }
 
 pub struct App {
@@ -242,11 +259,16 @@ impl App {
         path.exists().then_some(path)
     }
 
-    /// The list new records go into: the one given if it's yours, else your
-    /// first list (created if you have none).
+    /// The list new records go into: the one given if it's yours, else the one
+    /// you last saved to, else your first list (created if you have none).
     fn target_list(&mut self, preferred: Option<&str>) -> Option<String> {
         if let Some(id) = preferred.filter(|id| self.can_edit(id)) {
             return Some(id.to_string());
+        }
+        // Otherwise the list you last saved to, so curating one list doesn't
+        // mean choosing it every time.
+        if let Ok(Some(id)) = self.store.last_list() {
+            return Some(id);
         }
         match self.store.default_list() {
             Ok(list) => {
@@ -308,6 +330,17 @@ impl App {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let was_editing = self.editor.is_some();
+        let task = self.handle(message);
+        // A newly opened form starts with its first field focused, so typing
+        // and Tab work straight away.
+        if !was_editing && self.editor.is_some() {
+            return Task::batch([task, operation::focus(form::FIRST_INPUT)]);
+        }
+        task
+    }
+
+    fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Tab(tab) => {
                 self.tab = tab;
@@ -386,8 +419,20 @@ impl App {
                 }
             }
             Message::Form(field) => {
+                // Opening the calendar takes focus from the text fields so the
+                // arrow keys reach it; closing it returns focus to the date.
+                let focus = match &field {
+                    form::Field::OpenCalendar => Some(calendar::FOCUS_NOTHING),
+                    form::Field::Calendar(calendar::Action::Pick(_) | calendar::Action::Close) => {
+                        Some(form::DATE_INPUT)
+                    }
+                    _ => None,
+                };
                 if let Some(editor) = &mut self.editor {
                     editor.update(field, &self.groups);
+                }
+                if let Some(id) = focus {
+                    return operation::focus(id);
                 }
             }
             Message::Lists(msg) => return self.update_lists(msg),
@@ -395,6 +440,13 @@ impl App {
             Message::Cancel => self.editor = None,
             Message::Delete => self.delete(),
             Message::DismissStatus => self.status = None,
+            Message::Key(key, modifiers) => return self.on_key(&key, modifiers),
+            Message::Scroll(dy) => {
+                return operation::scroll_by(
+                    MAIN_SCROLL,
+                    scrollable::AbsoluteOffset { x: 0.0, y: dy },
+                );
+            }
         }
         Task::none()
     }
@@ -413,32 +465,56 @@ impl App {
             Msg::NewList => match self.store.create_list("New List") {
                 Ok(list) => {
                     self.reload();
-                    self.lists.renaming = Some((list.id, list.name));
+                    self.lists.editing = Some(lists::ListEdit::of(&list));
                 }
                 Err(e) => self.error(e),
             },
-            Msg::Rename(id) => {
-                let name = self.list_name(&id);
-                self.lists.renaming = Some((id, name));
+            Msg::Edit(id) => {
+                self.lists.editing = self
+                    .list_infos
+                    .iter()
+                    .find(|l| l.id == id)
+                    .map(lists::ListEdit::of);
             }
-            Msg::RenameText(name) => {
-                if let Some((_, current)) = &mut self.lists.renaming {
-                    *current = name;
+            Msg::EditName(s) => {
+                if let Some(edit) = &mut self.lists.editing {
+                    edit.name = s;
                 }
             }
-            Msg::SaveRename => {
-                if let Some((id, name)) = self.lists.renaming.take() {
-                    if name.trim().is_empty() {
-                        self.lists.renaming = Some((id, name));
-                        self.error("A list needs a name.");
-                    } else if let Err(e) = self.store.rename_list(&id, &name) {
+            Msg::EditDescription(s) => {
+                if let Some(edit) = &mut self.lists.editing {
+                    edit.description = s;
+                }
+            }
+            Msg::EditUpdateUrl(s) => {
+                if let Some(edit) = &mut self.lists.editing {
+                    edit.update_url = s;
+                }
+            }
+            Msg::SaveEdit => {
+                let Some(edit) = self.lists.editing.take() else {
+                    return Task::none();
+                };
+                if let Err(msg) = edit.validate() {
+                    self.lists.editing = Some(edit);
+                    self.error(msg);
+                    return Task::none();
+                }
+                let saved = self.store.edit_list(
+                    &edit.id,
+                    &edit.name,
+                    &edit.description,
+                    Some(&edit.update_url),
+                );
+                match saved {
+                    Ok(()) => self.reload(),
+                    Err(e) => {
+                        self.lists.editing = Some(edit);
                         self.error(e);
-                    } else {
-                        self.reload();
                     }
                 }
             }
-            Msg::CancelRename => self.lists.renaming = None,
+            Msg::CancelEdit => self.lists.editing = None,
             Msg::Export(id) => {
                 let name = lists::file_name(&self.list_name(&id));
                 return Task::perform(
@@ -647,6 +723,87 @@ impl App {
         }
     }
 
+    pub fn subscription(&self) -> Subscription<Message> {
+        keyboard::listen().filter_map(|event| match event {
+            keyboard::Event::KeyPressed { key, modifiers, .. } => {
+                Some(Message::Key(key, modifiers))
+            }
+            _ => None,
+        })
+    }
+
+    /// Keyboard shortcuts: Ctrl+E events, Ctrl+G groups, Ctrl+L lists, Ctrl+N
+    /// new (event, group or list, by panel), Ctrl+S search, Ctrl+R the panel on
+    /// the right; Tab and Shift+Tab move between fields; arrows, Page Up/Down,
+    /// Home and End scroll; Down in the date field opens its calendar, which
+    /// then takes the arrow keys.
+    fn on_key(&mut self, key: &keyboard::Key, modifiers: keyboard::Modifiers) -> Task<Message> {
+        if let Some(action) = self.editor.as_ref().and_then(|e| e.calendar_action(key)) {
+            return self.update(Message::Form(form::Field::Calendar(action)));
+        }
+        // Down in the event's date field opens the calendar.
+        if let keyboard::Key::Named(keyboard::key::Named::ArrowDown) = key.as_ref()
+            && matches!(self.editor, Some(Editor::Event(_)))
+        {
+            return operation::is_focused(form::DATE_INPUT).map(|focused| {
+                if focused {
+                    Message::Form(form::Field::OpenCalendar)
+                } else {
+                    Message::Scroll(LINE_SCROLL)
+                }
+            });
+        }
+        if let keyboard::Key::Named(keyboard::key::Named::Tab) = key.as_ref() {
+            return focus::step(!modifiers.shift());
+        }
+        // Scrolling the panel on the right. Text fields keep Home and End.
+        if modifiers.is_empty()
+            && let keyboard::Key::Named(named) = key.as_ref()
+        {
+            use keyboard::key::Named;
+            let scroll = |dy| {
+                operation::scroll_by(MAIN_SCROLL, scrollable::AbsoluteOffset { x: 0.0, y: dy })
+            };
+            match named {
+                Named::ArrowUp => return scroll(-LINE_SCROLL),
+                Named::ArrowDown => return scroll(LINE_SCROLL),
+                Named::PageUp => return scroll(-PAGE_SCROLL),
+                Named::PageDown => return scroll(PAGE_SCROLL),
+                Named::Home => {
+                    return operation::snap_to(MAIN_SCROLL, scrollable::RelativeOffset::START);
+                }
+                Named::End => return operation::snap_to_end(MAIN_SCROLL),
+                _ => {}
+            }
+        }
+        if !modifiers.command() {
+            return Task::none();
+        }
+        let keyboard::Key::Character(c) = key.as_ref() else {
+            return Task::none();
+        };
+        match c.to_lowercase().as_str() {
+            "e" => self.update(Message::Tab(Tab::Events)),
+            "g" => self.update(Message::Tab(Tab::Groups)),
+            "l" => self.update(Message::Tab(Tab::Lists)),
+            // Into the search box, its text selected so typing replaces it.
+            "s" => operation::focus(SEARCH_INPUT).chain(operation::select_all(SEARCH_INPUT)),
+            // Into the panel on the right: a form's first field, or the panel's
+            // first button, so Tab continues there and arrows scroll it.
+            "r" if self.editor.is_some() => {
+                operation::focus(form::FIRST_INPUT).chain(operation::select_all(form::FIRST_INPUT))
+            }
+            "r" => operation::focus(RESULTS_START),
+            // Starting something new from a form would throw away its edits.
+            "n" if self.editor.is_none() => match self.tab {
+                Tab::Events => self.update(Message::NewEvent(None)),
+                Tab::Groups => self.update(Message::NewGroup),
+                Tab::Lists => self.update(Message::Lists(lists::Msg::NewList)),
+            },
+            _ => Task::none(),
+        }
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         let main = match (&self.editor, self.tab) {
             (Some(editor), _) => editor.view(self),
@@ -690,12 +847,11 @@ impl App {
         let header = ui::heading("Social Activities!");
 
         let categories = column(CATEGORIES.iter().map(|c| {
-            checkbox(self.filters.categories.contains(c.slug))
-                .label(c.name)
-                .on_toggle(move |on| Message::Category(c.slug, on))
-                .size(16)
-                .text_size(14)
-                .into()
+            focusable::checkbox(
+                self.filters.categories.contains(c.slug),
+                c.name,
+                move |on| Message::Category(c.slug, on),
+            )
         }))
         .spacing(6);
 
@@ -733,7 +889,9 @@ impl App {
             tab("Groups", Tab::Groups),
             rule::horizontal(1),
             search_header,
-            text_input("Search…", &self.filters.search).on_input(Message::Search),
+            text_input("Search…", &self.filters.search)
+                .id(SEARCH_INPUT)
+                .on_input(Message::Search),
             location::area_picker(self.filters.area),
             space::vertical().height(SECTION_GAP),
             ui::muted("Categories"),

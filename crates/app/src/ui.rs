@@ -119,7 +119,7 @@ pub fn gray(theme: &Theme, status: button::Status) -> button::Style {
 
 /// A clickable tag chip; `selected` when it's part of the current search.
 pub fn tag<'a, M: Clone + 'a>(label: &str, selected: bool, on_press: M) -> Element<'a, M> {
-    button(text(label.to_string()).size(12))
+    let chip = button(text(label.to_string()).size(12))
         .padding([2, 8])
         .style(move |theme: &Theme, status| {
             let base = if selected {
@@ -131,9 +131,8 @@ pub fn tag<'a, M: Clone + 'a>(label: &str, selected: bool, on_press: M) -> Eleme
                 border: iced::border::rounded(10),
                 ..base
             }
-        })
-        .on_press(on_press)
-        .into()
+        });
+    crate::focusable::button(chip, on_press)
 }
 
 pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {

@@ -31,6 +31,8 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
+const LAST_LIST: &str = "last_list";
+
 /// What happened when a list file was installed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Installed {
@@ -108,6 +110,7 @@ impl Store {
         let moved_from = self.check_move(Table::Groups, &group.id, &group.list_id)?;
         db::save_group(&mut self.conn, group)?;
         self.touch(&group.list_id)?;
+        self.remember_list(&group.list_id)?;
         if let Some(from) = moved_from {
             self.touch(&from)?;
         }
@@ -125,6 +128,7 @@ impl Store {
         let moved_from = self.check_move(Table::Events, &event.id, &event.list_id)?;
         db::save_event(&mut self.conn, event)?;
         self.touch(&event.list_id)?;
+        self.remember_list(&event.list_id)?;
         if let Some(from) = moved_from {
             self.touch(&from)?;
         }
@@ -160,11 +164,36 @@ impl Store {
         }
     }
 
-    pub fn rename_list(&mut self, id: &str, name: &str) -> Result<()> {
+    /// Changes a list's details. They're part of what gets exported, so this
+    /// counts as a change to the list.
+    pub fn edit_list(
+        &mut self,
+        id: &str,
+        name: &str,
+        description: &str,
+        update_url: Option<&str>,
+    ) -> Result<()> {
         let mut list = self.owned_list(id)?;
         list.name = name.trim().into();
+        list.description = description.trim().into();
+        list.update_url = update_url
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+            .map(Into::into);
         list.updated_at = Utc::now();
         Ok(db::save_list(&mut self.conn, &list)?)
+    }
+
+    /// The list you last saved a group or event to, if it's still yours.
+    pub fn last_list(&self) -> Result<Option<String>> {
+        let Some(id) = db::setting(&self.conn, LAST_LIST)? else {
+            return Ok(None);
+        };
+        Ok(self.owned_list(&id).ok().map(|l| l.id))
+    }
+
+    fn remember_list(&self, id: &str) -> Result<()> {
+        Ok(db::set_setting(&self.conn, LAST_LIST, id)?)
     }
 
     /// Removes a list and everything in it.
@@ -375,7 +404,7 @@ mod tests {
             Err(StoreError::ReadOnly(_))
         ));
         assert!(matches!(
-            store.rename_list(&list.id, "x"),
+            store.edit_list(&list.id, "x", "", None),
             Err(StoreError::ReadOnly(_))
         ));
 
@@ -429,7 +458,7 @@ mod tests {
         let file = published(&source, &list, "2026-10-01T00:00:00Z");
         let mut store = Store::in_memory().unwrap();
         store.add_list(&file, None, true).unwrap();
-        assert!(store.rename_list(&list.id, "Renamed").is_ok());
+        assert!(store.edit_list(&list.id, "Renamed", "", None).is_ok());
 
         let newer = published(&source, &list, "2030-01-01T00:00:00Z");
         assert_eq!(store.install_bundled(&newer).unwrap(), Installed::Unchanged);
@@ -541,6 +570,48 @@ mod tests {
             })
             .unwrap();
         assert_eq!(store.groups().unwrap()[0].list_id, other.id);
+    }
+
+    #[test]
+    fn editing_list_details() {
+        let (mut store, list, _, _) = store_with_list();
+        store
+            .edit_list(
+                &list.id,
+                " Beach ",
+                " Sand things ",
+                Some(" https://x.org/l.json "),
+            )
+            .unwrap();
+        let edited = store.list(&list.id).unwrap();
+        assert_eq!(edited.name, "Beach");
+        assert_eq!(edited.description, "Sand things");
+        assert_eq!(edited.update_url.as_deref(), Some("https://x.org/l.json"));
+        assert!(edited.updated_at > list.updated_at);
+        assert_eq!(
+            store.export(&list.id).unwrap().update_url.as_deref(),
+            Some("https://x.org/l.json"),
+            "exports carry the update URL"
+        );
+        store.edit_list(&list.id, "Beach", "", Some("  ")).unwrap();
+        assert_eq!(store.list(&list.id).unwrap().update_url, None);
+    }
+
+    #[test]
+    fn remembers_the_last_list_saved_to() {
+        let (mut store, list, g, _) = store_with_list();
+        assert_eq!(store.last_list().unwrap(), Some(list.id.clone()));
+        let other = store.create_list("Weekend").unwrap();
+        let mut e = Event::new(&other.id, start());
+        e.group_id = Some(g.id.clone());
+        store.save_event(&e).unwrap();
+        assert_eq!(store.last_list().unwrap(), Some(other.id.clone()));
+        store.remove_list(&other.id).unwrap();
+        assert_eq!(
+            store.last_list().unwrap(),
+            None,
+            "a removed list is forgotten"
+        );
     }
 
     #[test]

@@ -135,6 +135,8 @@ const SCHEMA: &[&str] = &[
         UPDATE events SET list_id = (SELECT id FROM lists);
         -- Lists the user removed, so the one shipped with the app isn't reinstalled.
         CREATE TABLE removed_lists (id TEXT PRIMARY KEY);",
+    // v5: small per-database preferences, such as the list last saved to.
+    "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
 ];
 
 static MIGRATIONS: LazyLock<Migrations<'static>> =
@@ -587,6 +589,23 @@ pub fn replace_list(
         put_event(&tx, e)?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+pub fn setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+    Ok(conn
+        .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+            r.get(0)
+        })
+        .optional()?)
+}
+
+pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [key, value],
+    )?;
     Ok(())
 }
 

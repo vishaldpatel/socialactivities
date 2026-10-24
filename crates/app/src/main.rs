@@ -1,4 +1,7 @@
 mod app;
+mod calendar;
+mod focus;
+mod focusable;
 mod form;
 mod list;
 mod lists;
@@ -92,6 +95,7 @@ fn main() -> iced::Result {
         app::App::view,
     )
     .title(app::App::title)
+    .subscription(app::App::subscription)
     .scale_factor(|_| SCALE)
     .window_size((1100.0 * SCALE, 760.0 * SCALE))
     .run()

@@ -1,15 +1,15 @@
-//! The Lists panel: create, rename, export, add, remove and update lists.
+//! The Lists panel: create, edit, export, add, remove and update lists.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use iced::futures::channel::oneshot;
-use iced::widget::{Column, button, checkbox, column, row, space, text, text_input};
+use iced::widget::{Column, button, column, row, space, text, text_input};
 use iced::{Center, Element, Fill};
 use sdsa_core::{ListFile, ListInfo};
 
 use crate::app::{App, Message};
-use crate::ui;
+use crate::{focusable, ui};
 
 /// The largest list file accepted from a URL.
 const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024;
@@ -17,10 +17,12 @@ const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024;
 #[derive(Debug, Clone)]
 pub enum Msg {
     NewList,
-    Rename(String),
-    RenameText(String),
-    SaveRename,
-    CancelRename,
+    Edit(String),
+    EditName(String),
+    EditDescription(String),
+    EditUpdateUrl(String),
+    SaveEdit,
+    CancelEdit,
     Export(String),
     Exported(String, Option<PathBuf>),
     Location(String),
@@ -43,6 +45,37 @@ pub enum Msg {
     Update(String),
 }
 
+/// A list's details as typed in its edit form.
+pub struct ListEdit {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub update_url: String,
+}
+
+impl ListEdit {
+    pub fn of(list: &ListInfo) -> Self {
+        Self {
+            id: list.id.clone(),
+            name: list.name.clone(),
+            description: list.description.clone(),
+            update_url: list.update_url.clone().unwrap_or_default(),
+        }
+    }
+
+    /// Checks the form, returning a message for the first problem.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.name.trim().is_empty() {
+            return Err("A list needs a name.");
+        }
+        let url = self.update_url.trim();
+        if !url.is_empty() && !is_url(url) {
+            return Err("The update URL must start with https:// or http://.");
+        }
+        Ok(())
+    }
+}
+
 pub enum UpdateState {
     Checking,
     UpToDate,
@@ -58,8 +91,8 @@ pub struct Lists {
     /// The list being added is one you maintain, so it should be editable.
     pub maintain: bool,
     pub adding: bool,
-    /// The list being renamed, and the name typed so far.
-    pub renaming: Option<(String, String)>,
+    /// The list whose details are being edited.
+    pub editing: Option<ListEdit>,
     /// The list whose Remove button was pressed once.
     pub confirm_remove: Option<String>,
     pub updates: HashMap<String, UpdateState>,
@@ -125,10 +158,10 @@ pub fn save_file(name: String) -> Option<PathBuf> {
 }
 
 fn gray<'a>(label: &'a str, msg: Msg) -> Element<'a, Message> {
-    button(text(label).size(13))
-        .style(ui::gray)
-        .on_press(Message::Lists(msg))
-        .into()
+    focusable::button(
+        button(text(label).size(13)).style(ui::gray),
+        Message::Lists(msg),
+    )
 }
 
 pub fn view(app: &App) -> Element<'_, Message> {
@@ -139,27 +172,33 @@ pub fn view(app: &App) -> Element<'_, Message> {
         .any(|l| !l.owned && l.update_location().is_some());
 
     let mut header = row![
-        button("New List").on_press(Message::Lists(Msg::NewList)),
+        focusable::button_with_id(
+            button("New List"),
+            Message::Lists(Msg::NewList),
+            crate::app::RESULTS_START,
+        ),
         space::horizontal(),
     ]
     .spacing(8)
     .align_y(Center);
     if checkable {
-        header = header.push(
-            button("Check All for Updates")
-                .style(ui::gray)
-                .on_press(Message::Lists(Msg::CheckAll)),
-        );
+        header = header.push(focusable::button(
+            button("Check All for Updates").style(ui::gray),
+            Message::Lists(Msg::CheckAll),
+        ));
     }
 
-    let add_button = button(if state.adding {
+    let add_label = button(if state.adding {
         "Adding…"
     } else {
         "Add List"
-    })
-    .on_press_maybe(
-        (!state.adding && !state.location.trim().is_empty()).then_some(Message::Lists(Msg::Add)),
-    );
+    });
+    // Only reachable with Tab while it can be pressed.
+    let add_button: Element<'_, Message> = if !state.adding && !state.location.trim().is_empty() {
+        focusable::button(add_label, Message::Lists(Msg::Add))
+    } else {
+        add_label.into()
+    };
     let add = ui::card(
         column![
             ui::bold("Add a list"),
@@ -167,18 +206,19 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 text_input("https://… or a file path", &state.location)
                     .on_input(|s| Message::Lists(Msg::Location(s)))
                     .on_submit(Message::Lists(Msg::Add)),
-                button("Browse…")
-                    .style(ui::gray)
-                    .on_press(Message::Lists(Msg::Browse)),
+                focusable::button(
+                    button("Browse…").style(ui::gray),
+                    Message::Lists(Msg::Browse)
+                ),
                 add_button,
             ]
             .spacing(8)
             .align_y(Center),
-            checkbox(state.maintain)
-                .label("I maintain this list (make it editable here)")
-                .on_toggle(|on| Message::Lists(Msg::Maintain(on)))
-                .size(16)
-                .text_size(14),
+            focusable::checkbox(
+                state.maintain,
+                "I maintain this list (make it editable here)",
+                |on| Message::Lists(Msg::Maintain(on)),
+            ),
         ]
         .spacing(10),
     );
@@ -187,7 +227,9 @@ pub fn view(app: &App) -> Element<'_, Message> {
 
     column![
         header,
-        iced::widget::scrollable(column![add, cards].spacing(14).padding([0, 12])).height(Fill)
+        iced::widget::scrollable(column![add, cards].spacing(14).padding([0, 12]))
+            .id(crate::app::MAIN_SCROLL)
+            .height(Fill)
     ]
     .spacing(12)
     .into()
@@ -198,26 +240,16 @@ fn card<'a>(app: &'a App, list: &'a ListInfo) -> Element<'a, Message> {
     let groups = app.groups.iter().filter(|g| g.list_id == list.id).count();
     let events = app.events.iter().filter(|e| e.list_id == list.id).count();
 
-    let title: Element<'a, Message> = match &state.renaming {
-        Some((id, name)) if *id == list.id => row![
-            text_input("List name", name)
-                .on_input(|s| Message::Lists(Msg::RenameText(s)))
-                .on_submit(Message::Lists(Msg::SaveRename))
-                .width(320),
-            button(text("Save").size(13)).on_press(Message::Lists(Msg::SaveRename)),
-            gray("Cancel", Msg::CancelRename),
-        ]
-        .spacing(8)
-        .align_y(Center)
-        .into(),
-        _ => row![
-            ui::bold(list.name.as_str()).size(17),
-            ui::chip(if list.owned { "Yours" } else { "Added" }),
-        ]
-        .spacing(8)
-        .align_y(Center)
-        .into(),
-    };
+    if let Some(edit) = state.editing.as_ref().filter(|e| e.id == list.id) {
+        return edit_form(edit);
+    }
+
+    let title = row![
+        ui::bold(list.name.as_str()).size(17),
+        ui::chip(if list.owned { "Yours" } else { "Added" }),
+    ]
+    .spacing(8)
+    .align_y(Center);
 
     let updated = list
         .updated_at
@@ -235,7 +267,11 @@ fn card<'a>(app: &'a App, list: &'a ListInfo) -> Element<'a, Message> {
     if !list.description.is_empty() {
         body = body.push(text(list.description.as_str()).size(14));
     }
-    if !list.owned {
+    if list.owned {
+        if let Some(url) = &list.update_url {
+            body = body.push(ui::muted(format!("Published at {url}")));
+        }
+    } else {
         body = body.push(ui::muted(match list.update_location() {
             Some(location) => format!("Updates from {location}"),
             None => "Built in; updated with the app".into(),
@@ -254,8 +290,10 @@ fn card<'a>(app: &'a App, list: &'a ListInfo) -> Element<'a, Message> {
             body = body.push(
                 row![
                     ui::banner(format!("A newer version from {when} is available"), false),
-                    button(text("Update").size(13))
-                        .on_press(Message::Lists(Msg::Update(list.id.clone()))),
+                    focusable::button(
+                        button(text("Update").size(13)),
+                        Message::Lists(Msg::Update(list.id.clone()))
+                    ),
                 ]
                 .spacing(8)
                 .align_y(Center),
@@ -268,30 +306,62 @@ fn card<'a>(app: &'a App, list: &'a ListInfo) -> Element<'a, Message> {
     if state.confirm_remove.as_deref() == Some(&list.id) {
         actions = actions
             .push(text(format!("Remove “{}” and everything in it?", list.name)).size(14))
-            .push(
-                button(text("Yes, Remove").size(13))
-                    .style(button::danger)
-                    .on_press(Message::Lists(Msg::Remove(list.id.clone()))),
-            )
+            .push(focusable::button(
+                button(text("Yes, Remove").size(13)).style(button::danger),
+                Message::Lists(Msg::Remove(list.id.clone())),
+            ))
             .push(gray("Cancel", Msg::CancelRemove));
     } else {
         if list.owned {
-            actions = actions.push(gray("Rename", Msg::Rename(list.id.clone())));
+            actions = actions.push(gray("Edit", Msg::Edit(list.id.clone())));
         } else if list.update_location().is_some() {
             actions = actions.push(gray("Check for Updates", Msg::Check(list.id.clone())));
         }
         actions = actions
             .push(gray("Export…", Msg::Export(list.id.clone())))
             .push(space::horizontal())
-            .push(
-                button(text("Remove").size(13))
-                    .style(button::text)
-                    .on_press(Message::Lists(Msg::Remove(list.id.clone()))),
-            );
+            .push(focusable::button(
+                button(text("Remove").size(13)).style(button::text),
+                Message::Lists(Msg::Remove(list.id.clone())),
+            ));
     }
     body = body.push(actions);
 
     ui::card(body)
+}
+
+fn edit_form(edit: &ListEdit) -> Element<'_, Message> {
+    let field = |label, input: iced::widget::TextInput<'static, Message>| {
+        column![ui::muted(label), input].spacing(4)
+    };
+    ui::card(
+        column![
+            field(
+                "Name",
+                text_input("List name", &edit.name)
+                    .on_input(|s| Message::Lists(Msg::EditName(s)))
+                    .on_submit(Message::Lists(Msg::SaveEdit)),
+            ),
+            field(
+                "Description",
+                text_input("What's in this list", &edit.description)
+                    .on_input(|s| Message::Lists(Msg::EditDescription(s)))
+                    .on_submit(Message::Lists(Msg::SaveEdit)),
+            ),
+            field(
+                "Update URL (optional): where you'll publish this list, so people can check for newer versions",
+                text_input("https://…", &edit.update_url)
+                    .on_input(|s| Message::Lists(Msg::EditUpdateUrl(s)))
+                    .on_submit(Message::Lists(Msg::SaveEdit)),
+            ),
+            row![
+                focusable::button(button(text("Save").size(13)), Message::Lists(Msg::SaveEdit)),
+                gray("Cancel", Msg::CancelEdit),
+            ]
+            .spacing(8),
+        ]
+        .spacing(10),
+    )
 }
 
 #[cfg(test)]
@@ -306,6 +376,23 @@ mod tests {
         );
         assert_eq!(file_name("  Surf & Sand!! "), "surf-sand.json");
         assert_eq!(file_name("???"), "list.json");
+    }
+
+    #[test]
+    fn validates_list_edits() {
+        let mut edit = ListEdit {
+            id: "x".into(),
+            name: "Beach".into(),
+            description: String::new(),
+            update_url: String::new(),
+        };
+        assert!(edit.validate().is_ok());
+        edit.update_url = "example.com/list.json".into();
+        assert!(edit.validate().is_err());
+        edit.update_url = "https://example.com/list.json".into();
+        assert!(edit.validate().is_ok());
+        edit.name = "  ".into();
+        assert!(edit.validate().is_err());
     }
 
     #[test]

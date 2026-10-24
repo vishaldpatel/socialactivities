@@ -14,6 +14,25 @@ cargo run -p sdsa       # optionally: -- --user PATH to use another database
 cargo test --workspace
 ```
 
+## Keyboard
+
+| Keys | Does |
+|---|---|
+| Ctrl+E / Ctrl+G / Ctrl+L | Events / Groups / Lists |
+| Ctrl+N | New event, group or list, depending on the panel |
+| Ctrl+S | Jump to the search box |
+| Ctrl+R | Jump into the panel on the right (its first button, or a form's first field) |
+| ↑ ↓ / Page Up, Page Down / Home, End | Scroll the panel on the right |
+| Tab / Shift+Tab | Next / previous field, button, tag, checkbox or "By day"/"Next N days" dropdown (text is selected on arrival; the view scrolls to it) |
+| ↑ ↓ (or ← →) on a highlighted dropdown | Previous / next option |
+| Enter or Space on a highlighted button or checkbox | Press or toggle it |
+| Pick… (or ↓ in the date field) | Open the calendar: arrows move by day/week, Page Up/Down by month, Enter picks, Esc closes |
+
+Dates are entered as MM-DD-YYYY (slashes and YYYY-MM-DD also work); list
+files store them as YYYY-MM-DD. Other dropdowns (in the
+search panel and forms) can't take keyboard focus yet, so Tab skips them.
+Weeks start on Monday.
+
 ## Layout
 
 ```
@@ -28,8 +47,10 @@ Every group and event belongs to a **list**. Everything lives in one SQLite
 database in the platform data dir (e.g.
 `~/.local/share/sd-social-activities/user.sqlite`).
 
-- **Lists you own** ("Yours") can be edited, renamed, exported and removed.
-  Everyone starts with "My List"; the editors' "Save to list" picks which one.
+- **Lists you own** ("Yours") can be edited, exported and removed; **Edit**
+  changes the name, description and update URL. Everyone starts with "My
+  List"; the editors' "Save to list" picks which one, defaulting to the list
+  you last saved to.
 - **Added lists** come from a `.json` file or URL and are read-only. "Check for
   Updates" re-reads the list's update URL (or wherever it was added from) and
   offers the new version only if its `updated_at` is newer. Your own events can
@@ -54,9 +75,10 @@ local paths and aren't exported.
 3. **Export…** it back over `data/defaults.json` and rebuild. Everyone else's
    app replaces their read-only copy with yours because it's newer.
 
-To let people get changes without a new app release, host the exported file
-somewhere and add `"update_url": "https://…"` to it; "Check for Updates" then
-fetches from there.
+To let people get changes without a new app release, set the list's **Update
+URL** (Lists → Edit) to where you'll host the exported file, e.g. its raw
+GitHub URL. Exports include it, and everyone's "Check for Updates" fetches from
+there.
 
 The **Example:** groups are placeholders. Replace them with real, verified
 groups, using the "Last verified" field to track freshness.

@@ -3,19 +3,19 @@
 use std::collections::BTreeSet;
 
 use chrono::{Datelike, NaiveDate, TimeDelta};
-use iced::widget::{Column, Row, button, column, image, pick_list, row, scrollable, space, text};
+use iced::widget::{Column, Row, button, column, image, row, scrollable, space, text};
 use iced::{Center, Element, Fill};
 use sdsa_core::catalog::{category_name, neighborhood_name};
 use sdsa_core::{Event, Group, Occurrence};
 
 use crate::app::{App, Bucket, Horizon, Message};
-use crate::{search, ui};
+use crate::{focusable, search, ui};
 
 fn bucket_start(bucket: Bucket, date: NaiveDate) -> NaiveDate {
     match bucket {
         Bucket::Day => date,
-        // Weeks start on Sunday.
-        Bucket::Week => date - TimeDelta::days(i64::from(date.weekday().num_days_from_sunday())),
+        // Weeks start on Monday.
+        Bucket::Week => date - TimeDelta::days(i64::from(date.weekday().num_days_from_monday())),
         Bucket::Month => date.with_day(1).unwrap_or(date),
     }
 }
@@ -58,19 +58,23 @@ fn link_label(kind: &str) -> String {
 /// Buttons for opening a group's links.
 fn link_buttons(group: &Group) -> impl Iterator<Item = Element<'_, Message>> {
     group.links.iter().map(|l| {
-        button(text(link_label(&l.kind)).size(13))
-            .style(ui::gray)
-            .on_press(Message::OpenUrl(l.url.clone()))
-            .into()
+        focusable::button(
+            button(text(link_label(&l.kind)).size(13)).style(ui::gray),
+            Message::OpenUrl(l.url.clone()),
+        )
     })
 }
 
 pub fn events(app: &App) -> Element<'_, Message> {
     let header = row![
-        button("Add Event").on_press(Message::NewEvent(None)),
+        crate::focusable::button_with_id(
+            button("Add Event"),
+            Message::NewEvent(None),
+            crate::app::RESULTS_START,
+        ),
         space::horizontal(),
-        pick_list(Bucket::ALL, Some(app.bucket), Message::Bucket),
-        pick_list(Horizon::ALL, Some(app.horizon), Message::Horizon),
+        focusable::pick_list(&Bucket::ALL, app.bucket, Message::Bucket),
+        focusable::pick_list(&Horizon::ALL, app.horizon, Message::Horizon),
     ]
     .spacing(8)
     .align_y(Center);
@@ -100,9 +104,14 @@ pub fn events(app: &App) -> Element<'_, Message> {
         list = list.push(ui::muted("No events match your search."));
     }
 
-    column![header, scrollable(list.padding([0, 12])).height(Fill)]
-        .spacing(8)
-        .into()
+    column![
+        header,
+        scrollable(list.padding([0, 12]))
+            .id(crate::app::MAIN_SCROLL)
+            .height(Fill)
+    ]
+    .spacing(8)
+    .into()
 }
 
 fn occurrence<'a>(
@@ -146,20 +155,18 @@ fn occurrence<'a>(
 
     let mut actions = row![].spacing(6);
     if !event.url.is_empty() {
-        actions = actions.push(
-            button(text("Details").size(13))
-                .style(ui::gray)
-                .on_press(Message::OpenUrl(event.url.clone())),
-        );
+        actions = actions.push(focusable::button(
+            button(text("Details").size(13)).style(ui::gray),
+            Message::OpenUrl(event.url.clone()),
+        ));
     } else if let Some(g) = group {
         actions = actions.extend(link_buttons(g).take(1));
     }
     if app.can_edit(&event.list_id) {
-        actions = actions.push(
-            button(text("Edit").size(13))
-                .style(button::text)
-                .on_press(Message::EditEvent(event.id.clone())),
-        );
+        actions = actions.push(focusable::button(
+            button(text("Edit").size(13)).style(button::text),
+            Message::EditEvent(event.id.clone()),
+        ));
     }
 
     ui::card_with_side(
@@ -176,20 +183,23 @@ pub fn groups(app: &App) -> Element<'_, Message> {
         .filter(|g| app.filters.group(g, &app.hidden, app.viewing_hidden))
         .collect();
 
-    let mut header = row![button("Add Group").on_press(Message::NewGroup)]
-        .spacing(8)
-        .align_y(Center);
+    let mut header = row![crate::focusable::button_with_id(
+        button("Add Group"),
+        Message::NewGroup,
+        crate::app::RESULTS_START,
+    )]
+    .spacing(8)
+    .align_y(Center);
     let hidden = app.hidden_count();
     if hidden > 0 {
-        header = header.push(
-            button(text(format!("Hidden ({hidden})")))
-                .style(if app.viewing_hidden {
-                    button::primary
-                } else {
-                    ui::gray
-                })
-                .on_press(Message::ViewHidden(!app.viewing_hidden)),
-        );
+        header = header.push(focusable::button(
+            button(text(format!("Hidden ({hidden})"))).style(if app.viewing_hidden {
+                button::primary
+            } else {
+                ui::gray
+            }),
+            Message::ViewHidden(!app.viewing_hidden),
+        ));
     }
 
     let list: Element<'_, Message> = if visible.is_empty() {
@@ -206,9 +216,12 @@ pub fn groups(app: &App) -> Element<'_, Message> {
             .into()
     };
 
-    column![header, scrollable(list).height(Fill)]
-        .spacing(12)
-        .into()
+    column![
+        header,
+        scrollable(list).id(crate::app::MAIN_SCROLL).height(Fill)
+    ]
+    .spacing(12)
+    .into()
 }
 
 /// A title followed by category chips and clickable tag chips.
@@ -277,31 +290,28 @@ fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
     }
     if app.can_edit(&g.list_id) {
         body = body.push(ui::muted(match g.last_verified {
-            Some(d) => format!("Last verified {d}"),
+            Some(d) => format!("Last verified {}", crate::form::format_date(d)),
             None => "Never verified".into(),
         }));
     }
 
     let mut actions = row![].spacing(6).extend(link_buttons(g));
     actions = actions.push(space::horizontal());
-    actions = actions.push(
-        button(text(if hidden { "Unhide" } else { "Hide" }).size(13))
-            .style(button::text)
-            .on_press(Message::SetHidden(g.id.clone(), !hidden)),
-    );
+    actions = actions.push(focusable::button(
+        button(text(if hidden { "Unhide" } else { "Hide" }).size(13)).style(button::text),
+        Message::SetHidden(g.id.clone(), !hidden),
+    ));
     if !hidden {
-        actions = actions.push(
-            button(text("+ Event").size(13))
-                .style(button::text)
-                .on_press(Message::NewEvent(Some(g.id.clone()))),
-        );
+        actions = actions.push(focusable::button(
+            button(text("+ Event").size(13)).style(button::text),
+            Message::NewEvent(Some(g.id.clone())),
+        ));
     }
     if app.can_edit(&g.list_id) {
-        actions = actions.push(
-            button(text("Edit").size(13))
-                .style(button::text)
-                .on_press(Message::EditGroup(g.id.clone())),
-        );
+        actions = actions.push(focusable::button(
+            button(text("Edit").size(13)).style(button::text),
+            Message::EditGroup(g.id.clone()),
+        ));
     }
     body = body.push(actions);
 
@@ -319,11 +329,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn weeks_start_on_sunday() {
+    fn weeks_start_on_monday() {
         let thu = NaiveDate::from_ymd_opt(2026, 10, 22).unwrap();
         assert_eq!(
             bucket_start(Bucket::Week, thu),
-            NaiveDate::from_ymd_opt(2026, 10, 18).unwrap()
+            NaiveDate::from_ymd_opt(2026, 10, 19).unwrap()
+        );
+        let sun = NaiveDate::from_ymd_opt(2026, 10, 25).unwrap();
+        assert_eq!(
+            bucket_start(Bucket::Week, sun),
+            NaiveDate::from_ymd_opt(2026, 10, 19).unwrap(),
+            "Sunday ends the week"
         );
         assert_eq!(
             bucket_start(Bucket::Month, thu),

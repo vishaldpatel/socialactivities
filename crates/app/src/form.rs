@@ -4,8 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use iced::widget::{
-    Column, button, checkbox, column, pick_list, row, scrollable, space, text, text_editor,
-    text_input,
+    Column, button, column, pick_list, row, scrollable, space, text, text_editor, text_input,
 };
 use iced::{Center, Element, Fill};
 use sdsa_core::catalog::{CATEGORIES, LINK_KINDS, Neighborhood, find_neighborhood, normalize_tag};
@@ -13,7 +12,14 @@ use sdsa_core::recurrence::{self, Repeat};
 use sdsa_core::{Cost, CostKind, Event, Group, Link, ListInfo};
 
 use crate::app::{App, Message};
+use crate::{calendar, focusable};
 use crate::{location, ui};
+
+/// The first field of each form, focused when the form opens.
+pub const FIRST_INPUT: &str = "form-first";
+
+/// The event form's date field, refocused when the calendar closes.
+pub const DATE_INPUT: &str = "event-date";
 
 /// A single edit to whichever form is open.
 #[derive(Debug, Clone)]
@@ -47,6 +53,8 @@ pub enum Field {
     Rule(String),
     Url(String),
     Cancelled(String),
+    OpenCalendar,
+    Calendar(calendar::Action),
 }
 
 /// An entry in the list picker: one of your lists.
@@ -252,7 +260,7 @@ impl GroupForm {
             logo: g.logo_path.clone().unwrap_or_default(),
             frequency: g.frequency.clone(),
             links,
-            verified: g.last_verified.map(|d| d.to_string()).unwrap_or_default(),
+            verified: g.last_verified.map(format_date).unwrap_or_default(),
             original: g,
         }
     }
@@ -282,7 +290,7 @@ impl GroupForm {
                 }
             }
             Field::Verified(s) => self.verified = s,
-            Field::VerifiedToday => self.verified = recurrence::now_local().date().to_string(),
+            Field::VerifiedToday => self.verified = format_date(recurrence::now_local().date()),
             _ => {}
         }
         self.common.confirm_delete = false;
@@ -295,7 +303,7 @@ impl GroupForm {
         }
         let verified = match self.verified.trim() {
             "" => None,
-            s => Some(parse_date(s).ok_or("Last verified must look like 2026-10-23.")?),
+            s => Some(parse_date(s).ok_or("Last verified must look like 10-23-2026.")?),
         };
         let logo = self.logo.trim();
         Ok(Group {
@@ -333,25 +341,26 @@ impl GroupForm {
                 text_input("https://…", url)
                     .on_input(move |s| Message::Form(Field::LinkUrl(i, s)))
                     .width(Fill),
-                button("Remove")
-                    .style(button::text)
-                    .on_press(Message::Form(Field::RemoveLink(i))),
+                press(
+                    button("Remove").style(button::text),
+                    Message::Form(Field::RemoveLink(i))
+                ),
             ]
             .spacing(8)
             .align_y(Center)
             .into()
         }))
         .spacing(6)
-        .push(
-            button("+ Add Link")
-                .style(ui::gray)
-                .on_press(Message::Form(Field::AddLink)),
-        );
+        .push(press(
+            button("+ Add Link").style(ui::gray),
+            Message::Form(Field::AddLink),
+        ));
 
         column![
             labeled(
                 "Name",
                 text_input("e.g. PB Sunset Volleyball", &self.name)
+                    .id(FIRST_INPUT)
                     .on_input(|s| Message::Form(Field::Name(s)))
             ),
             description(&self.common),
@@ -379,14 +388,15 @@ impl GroupForm {
                     .on_input(|s| Message::Form(Field::Logo(s)))
             ),
             labeled(
-                "Last verified (YYYY-MM-DD)",
+                "Last verified (MM-DD-YYYY)",
                 row![
                     text_input("", &self.verified)
                         .on_input(|s| Message::Form(Field::Verified(s)))
                         .width(160),
-                    button("Today")
-                        .style(ui::gray)
-                        .on_press(Message::Form(Field::VerifiedToday)),
+                    press(
+                        button("Today").style(ui::gray),
+                        Message::Form(Field::VerifiedToday)
+                    ),
                 ]
                 .spacing(8)
             ),
@@ -406,6 +416,8 @@ pub struct EventForm {
     rule: String,
     url: String,
     cancelled: String,
+    /// The highlighted day while the date calendar is open.
+    calendar: Option<NaiveDate>,
 }
 
 impl EventForm {
@@ -427,7 +439,7 @@ impl EventForm {
                 id: e.group_id.clone(),
                 name: String::new(),
             },
-            date: e.start.date().to_string(),
+            date: format_date(e.start.date()),
             time: e.start.format("%H:%M").to_string(),
             hours: format_hours(e.duration_minutes),
             repeat,
@@ -436,9 +448,10 @@ impl EventForm {
             cancelled: e
                 .cancelled
                 .iter()
-                .map(|d| d.to_string())
+                .map(|d| format_date(*d))
                 .collect::<Vec<_>>()
                 .join(", "),
+            calendar: None,
             original: e,
         }
     }
@@ -469,6 +482,18 @@ impl EventForm {
                 None => self.group = GroupChoice::none(),
             },
             Field::Date(s) => self.date = s,
+            Field::OpenCalendar => {
+                let today = recurrence::now_local().date();
+                self.calendar = Some(parse_date(self.date.trim()).unwrap_or(today));
+            }
+            Field::Calendar(action) => match action {
+                calendar::Action::Pick(day) => {
+                    self.date = format_date(day);
+                    self.calendar = None;
+                }
+                calendar::Action::Close => self.calendar = None,
+                _ => self.calendar = self.calendar.map(|c| calendar::moved(c, action)),
+            },
             Field::Time(s) => self.time = s,
             Field::Hours(s) => self.hours = s,
             Field::Repeat(r) => {
@@ -490,7 +515,7 @@ impl EventForm {
     }
 
     fn start(&self) -> Result<NaiveDateTime, String> {
-        let date = parse_date(self.date.trim()).ok_or("Date must look like 2026-10-23.")?;
+        let date = parse_date(self.date.trim()).ok_or("Date must look like 10-23-2026.")?;
         let time = parse_time(self.time.trim()).ok_or("Time must look like 19:00 or 7:00 PM.")?;
         Ok(date.and_time(time))
     }
@@ -531,7 +556,7 @@ impl EventForm {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(|s| {
-                parse_date(s).ok_or(format!("Cancelled date {s:?} must look like 2026-10-23."))
+                parse_date(s).ok_or(format!("Cancelled date {s:?} must look like 10-23-2026."))
             })
             .collect::<Result<_, _>>()?;
         Ok(Event {
@@ -595,9 +620,18 @@ impl EventForm {
         let mut schedule = column![
             row![
                 labeled(
-                    "Date (YYYY-MM-DD)",
-                    text_input("2026-10-23", &self.date)
-                        .on_input(|s| Message::Form(Field::Date(s)))
+                    "When (MM-DD-YYYY)",
+                    row![
+                        text_input("10-23-2026", &self.date)
+                            .id(DATE_INPUT)
+                            .on_input(|s| Message::Form(Field::Date(s))),
+                        press(
+                            button(text("Pick…").size(14)).style(ui::gray),
+                            Message::Form(Field::OpenCalendar)
+                        ),
+                    ]
+                    .spacing(6)
+                    .align_y(Center)
                 ),
                 labeled(
                     "Start time",
@@ -617,6 +651,11 @@ impl EventForm {
             .spacing(12),
         ]
         .spacing(8);
+        if let Some(cursor) = self.calendar {
+            schedule = schedule.push(calendar::view(cursor, parse_date(self.date.trim()), |a| {
+                Message::Form(Field::Calendar(a))
+            }));
+        }
         if self.repeat == Repeat::Custom {
             schedule = schedule.push(labeled(
                 "RRULE (RFC 5545)",
@@ -631,7 +670,7 @@ impl EventForm {
         if self.repeat != Repeat::Once {
             schedule = schedule.push(labeled(
                 "Cancelled dates (comma separated)",
-                text_input("2026-12-25, 2027-01-01", &self.cancelled)
+                text_input("12-25-2026, 01-01-2027", &self.cancelled)
                     .on_input(|s| Message::Form(Field::Cancelled(s))),
             ));
         }
@@ -640,6 +679,7 @@ impl EventForm {
             labeled(
                 "Title",
                 text_input("e.g. Tuesday game night", &self.title)
+                    .id(FIRST_INPUT)
                     .on_input(|s| Message::Form(Field::Name(s)))
             ),
             labeled(
@@ -687,6 +727,17 @@ impl Editor {
         match self {
             Editor::Group(f) => f.update(field),
             Editor::Event(f) => f.update(field, groups),
+        }
+    }
+
+    /// The calendar's action for `key`, if a calendar is open and uses it.
+    pub fn calendar_action(&self, key: &iced::keyboard::Key) -> Option<calendar::Action> {
+        match self {
+            Editor::Event(EventForm {
+                calendar: Some(cursor),
+                ..
+            }) => calendar::key_action(key, *cursor),
+            _ => None,
         }
     }
 
@@ -740,8 +791,8 @@ impl Editor {
         ));
 
         let mut actions = row![
-            button(save).style(button::primary).on_press(Message::Save),
-            button("Cancel").style(ui::gray).on_press(Message::Cancel),
+            press(button(save).style(button::primary), Message::Save),
+            press(button("Cancel").style(ui::gray), Message::Cancel),
             space::horizontal(),
         ]
         .spacing(8)
@@ -755,11 +806,7 @@ impl Editor {
             } else {
                 "Delete"
             };
-            actions = actions.push(
-                button(label)
-                    .style(button::danger)
-                    .on_press(Message::Delete),
-            );
+            actions = actions.push(press(button(label).style(button::danger), Message::Delete));
         }
 
         let mut form = fields.spacing(14).padding([0, 12]);
@@ -768,7 +815,10 @@ impl Editor {
         }
         form = form.push(actions);
 
-        scrollable(form).height(Fill).into()
+        scrollable(form)
+            .id(crate::app::MAIN_SCROLL)
+            .height(Fill)
+            .into()
     }
 }
 
@@ -814,12 +864,9 @@ fn cost(common: &Common) -> Element<'_, Message> {
 
 fn categories(common: &Common) -> Column<'_, Message> {
     let boxes = row(CATEGORIES.iter().map(|c| {
-        checkbox(common.categories.contains(c.slug))
-            .label(c.name)
-            .on_toggle(move |on| Message::Form(Field::Category(c.slug, on)))
-            .size(16)
-            .text_size(14)
-            .into()
+        focusable::checkbox(common.categories.contains(c.slug), c.name, move |on| {
+            Message::Form(Field::Category(c.slug, on))
+        })
     }))
     .spacing(14)
     .wrap();
@@ -844,8 +891,21 @@ fn tags<'a>(common: &'a Common, all_tags: &'a [String]) -> Column<'a, Message> {
     labeled("Tags (comma separated; click one below to add it)", field)
 }
 
+/// Dates are shown and typed as MM-DD-YYYY. Slashes and ISO (YYYY-MM-DD,
+/// e.g. pasted) are accepted too.
 fn parse_date(s: &str) -> Option<NaiveDate> {
-    NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()
+    ["%m-%d-%Y", "%m/%d/%Y", "%Y-%m-%d"]
+        .iter()
+        .find_map(|fmt| NaiveDate::parse_from_str(s, fmt).ok())
+}
+
+pub fn format_date(d: NaiveDate) -> String {
+    d.format("%m-%d-%Y").to_string()
+}
+
+/// A button Tab can reach and Enter can press; `msg` is sent either way.
+fn press<'a>(b: iced::widget::Button<'a, Message>, msg: Message) -> Element<'a, Message> {
+    focusable::button(b, msg)
 }
 
 fn parse_time(s: &str) -> Option<NaiveTime> {
@@ -881,6 +941,16 @@ mod tests {
         assert_eq!(parse_time("7:00PM"), seven_pm);
         assert_eq!(parse_time("7 PM"), seven_pm);
         assert_eq!(parse_time("later"), None);
+    }
+
+    #[test]
+    fn dates_are_month_day_year() {
+        let d = NaiveDate::from_ymd_opt(2026, 3, 7).unwrap();
+        assert_eq!(format_date(d), "03-07-2026");
+        assert_eq!(parse_date("03-07-2026"), Some(d));
+        assert_eq!(parse_date("3/7/2026"), Some(d));
+        assert_eq!(parse_date("2026-03-07"), Some(d), "ISO still accepted");
+        assert_eq!(parse_date("13-07-2026"), None);
     }
 
     #[test]
@@ -936,6 +1006,24 @@ mod tests {
             names(&EventForm::new(existing, false))[1..],
             ["Shown", "Hidden"]
         );
+    }
+
+    #[test]
+    fn calendar_picks_into_the_date_field() {
+        let start = NaiveDate::from_ymd_opt(2026, 10, 6)
+            .unwrap()
+            .and_hms_opt(19, 0, 0)
+            .unwrap();
+        let mut f = EventForm::new(Event::new("list", start), true);
+        f.update(Field::OpenCalendar, &[]);
+        assert_eq!(f.calendar, NaiveDate::from_ymd_opt(2026, 10, 6));
+        f.update(Field::Calendar(calendar::Action::Move(7)), &[]);
+        f.update(Field::Calendar(calendar::Action::Month(1)), &[]);
+        let cursor = f.calendar.unwrap();
+        assert_eq!(cursor, NaiveDate::from_ymd_opt(2026, 11, 13).unwrap());
+        f.update(Field::Calendar(calendar::Action::Pick(cursor)), &[]);
+        assert_eq!(f.date, "11-13-2026");
+        assert!(f.calendar.is_none());
     }
 
     #[test]
