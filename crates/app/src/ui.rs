@@ -144,6 +144,33 @@ pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
         .into()
 }
 
+/// A card with a lighter, full-height panel down its left edge (an event's
+/// time), its content centered so the space either side is equal.
+pub fn card_with_side<'a, M: 'a>(
+    side: impl Into<Element<'a, M>>,
+    side_width: f32,
+    body: impl Into<Element<'a, M>>,
+) -> Element<'a, M> {
+    let side = container(side)
+        .center_x(side_width)
+        .center_y(iced::Fill)
+        .style(|theme: &Theme| container::Style {
+            background: Some(theme.extended_palette().background.weak.color.into()),
+            // Just inside the card's 5px corners and 1px border.
+            border: iced::border::rounded(iced::border::left(4)),
+            ..container::Style::default()
+        });
+    container(iced::widget::row![
+        side,
+        container(body).padding(12).width(iced::Fill)
+    ])
+    // Leaves the card's border visible around the panel.
+    .padding(1)
+    .width(iced::Fill)
+    .style(container::bordered_box)
+    .into()
+}
+
 pub fn chip<'a, M: 'a>(label: &'a str) -> Element<'a, M> {
     container(text(label).size(12))
         .padding([2, 8])

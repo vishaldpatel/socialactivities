@@ -28,8 +28,9 @@ fn bucket_label(bucket: Bucket, start: NaiveDate) -> String {
     }
 }
 
-/// The time column's width; just enough for "12:00 PM". Longer labels use two lines.
-const WHEN_WIDTH: f32 = 90.0;
+/// The time panel's width: "12:00 PM" plus a margin either side. Longer
+/// labels use two lines.
+const WHEN_WIDTH: f32 = 104.0;
 
 fn when(bucket: Bucket, occ: &Occurrence) -> String {
     if occ.end.date() > occ.start.date() + TimeDelta::days(1) {
@@ -161,14 +162,10 @@ fn occurrence<'a>(
         );
     }
 
-    ui::card(
-        row![
-            ui::bold(when(app.bucket, occ)).width(WHEN_WIDTH),
-            info,
-            actions,
-        ]
-        .spacing(12)
-        .align_y(Center),
+    ui::card_with_side(
+        ui::bold(when(app.bucket, occ)).align_x(Center),
+        WHEN_WIDTH,
+        row![info, actions].spacing(12).align_y(Center),
     )
 }
 
