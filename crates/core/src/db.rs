@@ -137,6 +137,8 @@ const SCHEMA: &[&str] = &[
         CREATE TABLE removed_lists (id TEXT PRIMARY KEY);",
     // v5: small per-database preferences, such as the list last saved to.
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+    // v6: logos were removed.
+    "ALTER TABLE groups DROP COLUMN logo_path;",
 ];
 
 static MIGRATIONS: LazyLock<Migrations<'static>> =
@@ -223,7 +225,7 @@ pub fn load_groups(conn: &Connection) -> Result<Vec<Group>> {
     let mut links =
         conn.prepare("SELECT kind, url FROM group_links WHERE group_id = ?1 ORDER BY position")?;
     let mut stmt = conn.prepare(
-        "SELECT id, name, description, logo_path, neighborhood, address, frequency,
+        "SELECT id, name, description, neighborhood, address, frequency,
                 cost_kind, cost_note, last_verified, list_id
          FROM groups ORDER BY name COLLATE NOCASE",
     )?;
@@ -231,23 +233,22 @@ pub fn load_groups(conn: &Connection) -> Result<Vec<Group>> {
         Ok((
             Group {
                 id: r.get(0)?,
-                list_id: r.get(10)?,
+                list_id: r.get(9)?,
                 name: r.get(1)?,
                 description: r.get(2)?,
-                logo_path: r.get(3)?,
-                neighborhood: r.get(4)?,
-                address: r.get(5)?,
-                frequency: r.get(6)?,
+                neighborhood: r.get(3)?,
+                address: r.get(4)?,
+                frequency: r.get(5)?,
                 cost: Cost {
-                    kind: CostKind::parse(&r.get::<_, String>(7)?),
-                    note: r.get(8)?,
+                    kind: CostKind::parse(&r.get::<_, String>(6)?),
+                    note: r.get(7)?,
                 },
                 categories: Vec::new(),
                 tags: Vec::new(),
                 links: Vec::new(),
                 last_verified: None,
             },
-            r.get::<_, Option<String>>(9)?,
+            r.get::<_, Option<String>>(8)?,
         ))
     })?;
 
@@ -281,13 +282,13 @@ pub fn save_group(conn: &mut Connection, g: &Group) -> Result<()> {
 
 fn put_group(tx: &Transaction, g: &Group) -> Result<()> {
     tx.execute(
-        "INSERT INTO groups (id, name, description, logo_path, neighborhood, address,
+        "INSERT INTO groups (id, name, description, neighborhood, address,
                              frequency, cost_kind, cost_note, last_verified, list_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT(id) DO UPDATE SET
             list_id = excluded.list_id,
             name = excluded.name, description = excluded.description,
-            logo_path = excluded.logo_path, neighborhood = excluded.neighborhood,
+            neighborhood = excluded.neighborhood,
             address = excluded.address, frequency = excluded.frequency,
             cost_kind = excluded.cost_kind, cost_note = excluded.cost_note,
             last_verified = excluded.last_verified",
@@ -295,7 +296,6 @@ fn put_group(tx: &Transaction, g: &Group) -> Result<()> {
             g.id,
             g.name,
             g.description,
-            g.logo_path,
             g.neighborhood,
             g.address,
             g.frequency,

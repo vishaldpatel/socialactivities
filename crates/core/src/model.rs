@@ -94,9 +94,6 @@ pub struct Group {
     pub list_id: String,
     pub name: String,
     pub description: String,
-    /// Local path to a logo image (relative paths resolve against the database's
-    /// directory). Not included when a list is exported.
-    pub logo_path: Option<String>,
     pub neighborhood: String,
     pub address: String,
     /// Human description of how often the group meets, e.g. "Weekly on Saturdays".
@@ -117,7 +114,6 @@ impl Group {
             list_id: list_id.into(),
             name: String::new(),
             description: String::new(),
-            logo_path: None,
             neighborhood: String::new(),
             address: String::new(),
             frequency: String::new(),

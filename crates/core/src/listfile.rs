@@ -224,7 +224,6 @@ impl GroupRecord {
             list_id: list_id.into(),
             name: self.name.clone(),
             description: self.description.clone(),
-            logo_path: None,
             neighborhood: self.neighborhood.clone(),
             address: self.address.clone(),
             frequency: self.frequency.clone(),
@@ -335,14 +334,6 @@ mod tests {
         assert_eq!(file.info(true, None), list);
         assert_eq!(file.groups(), groups);
         assert_eq!(file.events(), events);
-    }
-
-    #[test]
-    fn logos_stay_local() {
-        let (list, mut groups, events) = sample();
-        groups[0].logo_path = Some("/home/me/logo.png".into());
-        let json = ListFile::new(&list, &groups, &events).to_json();
-        assert!(!json.contains("logo"));
     }
 
     #[test]

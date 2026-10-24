@@ -35,7 +35,6 @@ pub enum Field {
     /// Appends an existing tag to the tags field.
     AddTag(String),
     // Groups
-    Logo(String),
     Frequency(String),
     LinkKind(usize, &'static str),
     LinkUrl(usize, String),
@@ -226,7 +225,6 @@ pub struct GroupForm {
     original: Group,
     common: Common,
     name: String,
-    logo: String,
     frequency: String,
     links: Vec<(&'static str, String)>,
     verified: String,
@@ -257,7 +255,6 @@ impl GroupForm {
                 (&g.categories, &g.tags),
             ),
             name: g.name.clone(),
-            logo: g.logo_path.clone().unwrap_or_default(),
             frequency: g.frequency.clone(),
             links,
             verified: g.last_verified.map(format_date).unwrap_or_default(),
@@ -271,7 +268,6 @@ impl GroupForm {
         }
         match field {
             Field::Name(s) => self.name = s,
-            Field::Logo(s) => self.logo = s,
             Field::Frequency(s) => self.frequency = s,
             Field::LinkKind(i, kind) => {
                 if let Some(link) = self.links.get_mut(i) {
@@ -305,11 +301,9 @@ impl GroupForm {
             "" => None,
             s => Some(parse_date(s).ok_or("Last verified must look like 10-23-2026.")?),
         };
-        let logo = self.logo.trim();
         Ok(Group {
             name: name.into(),
             description: self.common.description(),
-            logo_path: (!logo.is_empty()).then(|| logo.into()),
             neighborhood: self.common.neighborhood_slug()?,
             address: self.common.place.trim().into(),
             frequency: self.frequency.trim().into(),
@@ -382,11 +376,6 @@ impl GroupForm {
             categories(&self.common),
             tags(&self.common, all_tags),
             labeled("Links", links),
-            labeled(
-                "Logo image path (relative to the database folder, or absolute)",
-                text_input("logos/my-group.png", &self.logo)
-                    .on_input(|s| Message::Form(Field::Logo(s)))
-            ),
             labeled(
                 "Last verified (MM-DD-YYYY)",
                 row![

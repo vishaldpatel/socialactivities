@@ -63,8 +63,7 @@ Hidden groups are remembered by id across all lists. Group and event ids must
 be unique across lists; adding a list that reuses another list's ids is
 refused.
 
-The list file format is defined in `crates/core/src/listfile.rs`. Logos are
-local paths and aren't exported.
+The list file format is defined in `crates/core/src/listfile.rs`.
 
 ## Curating the built-in list
 

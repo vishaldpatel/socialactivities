@@ -1,5 +1,4 @@
 use std::collections::{BTreeSet, HashSet};
-use std::path::{Path, PathBuf};
 
 use chrono::{NaiveTime, TimeDelta};
 use iced::widget::operation;
@@ -175,8 +174,6 @@ pub enum Message {
 
 pub struct App {
     store: Store,
-    /// The folder holding the database; relative logo paths resolve against it.
-    data_dir: PathBuf,
     pub list_infos: Vec<ListInfo>,
     pub lists: Lists,
     pub groups: Vec<Group>,
@@ -198,10 +195,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(store: Store, db_path: PathBuf, status: Option<(String, bool)>) -> Self {
+    pub fn new(store: Store, status: Option<(String, bool)>) -> Self {
         let mut app = Self {
             store,
-            data_dir: db_path.parent().map(Path::to_path_buf).unwrap_or_default(),
             list_infos: Vec::new(),
             lists: Lists::default(),
             groups: Vec::new(),
@@ -246,17 +242,6 @@ impl App {
 
     pub fn group(&self, id: Option<&str>) -> Option<&Group> {
         id.and_then(|id| self.groups.iter().find(|g| g.id == id))
-    }
-
-    /// Resolves a group's logo, with relative paths taken from the database's folder.
-    pub fn logo_path(&self, g: &Group) -> Option<PathBuf> {
-        let logo = Path::new(g.logo_path.as_deref()?);
-        let path = if logo.is_relative() {
-            self.data_dir.join(logo)
-        } else {
-            logo.to_path_buf()
-        };
-        path.exists().then_some(path)
     }
 
     /// The list new records go into: the one given if it's yours, else the one

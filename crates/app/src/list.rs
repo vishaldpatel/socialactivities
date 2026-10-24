@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use chrono::{Datelike, NaiveDate, TimeDelta};
-use iced::widget::{Column, Row, button, column, image, row, scrollable, space, text};
+use iced::widget::{Column, Row, button, column, row, scrollable, space, text};
 use iced::{Center, Element, Fill};
 use sdsa_core::catalog::{category_name, neighborhood_name};
 use sdsa_core::{Event, Group, Occurrence};
@@ -315,13 +315,7 @@ fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
     }
     body = body.push(actions);
 
-    let content: Element<'a, Message> = match app.logo_path(g) {
-        Some(path) => row![image(path).width(56).height(56), body]
-            .spacing(12)
-            .into(),
-        None => body.into(),
-    };
-    ui::card(content)
+    ui::card(body)
 }
 
 #[cfg(test)]

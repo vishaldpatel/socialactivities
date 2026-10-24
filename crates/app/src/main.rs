@@ -74,7 +74,7 @@ fn main() -> iced::Result {
         let path = user_path(args.user)?;
         let mut store = Store::open(&path).map_err(|e| e.to_string())?;
         let status = install_bundled(&mut store);
-        Ok((store, path, status))
+        Ok((store, status))
     });
     let opened = match opened {
         Ok(opened) => opened,
@@ -88,8 +88,8 @@ fn main() -> iced::Result {
     let opened = Cell::new(Some(opened));
     iced::application(
         move || {
-            let (store, path, status) = opened.take().expect("application booted twice");
-            app::App::new(store, path, status)
+            let (store, status) = opened.take().expect("application booted twice");
+            app::App::new(store, status)
         },
         app::App::update,
         app::App::view,
