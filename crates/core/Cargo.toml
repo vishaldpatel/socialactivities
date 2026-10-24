@@ -1,0 +1,14 @@
+[package]
+name = "sdsa-core"
+description = "Data model, storage and recurrence logic for San Diego Social Activities"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono.workspace = true
+rrule.workspace = true
+rusqlite.workspace = true
+rusqlite_migration.workspace = true
+thiserror.workspace = true
+uuid.workspace = true

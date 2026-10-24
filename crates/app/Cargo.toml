@@ -1,0 +1,13 @@
+[package]
+name = "sdsa"
+description = "San Diego Social Activities desktop app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sdsa-core.workspace = true
+chrono.workspace = true
+iced.workspace = true
+directories.workspace = true
+open.workspace = true
