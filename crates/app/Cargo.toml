@@ -11,3 +11,5 @@ chrono.workspace = true
 iced.workspace = true
 directories.workspace = true
 open.workspace = true
+ureq.workspace = true
+rfd.workspace = true

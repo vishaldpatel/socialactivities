@@ -10,7 +10,7 @@ use iced::widget::{
 use iced::{Center, Element, Fill};
 use sdsa_core::catalog::{CATEGORIES, LINK_KINDS, Neighborhood, find_neighborhood, normalize_tag};
 use sdsa_core::recurrence::{self, Repeat};
-use sdsa_core::{Cost, CostKind, Event, Group, Link, Source};
+use sdsa_core::{Cost, CostKind, Event, Group, Link, ListInfo};
 
 use crate::app::{App, Message};
 use crate::{location, ui};
@@ -37,6 +37,7 @@ pub enum Field {
     RemoveLink(usize),
     Verified(String),
     VerifiedToday,
+    List(ListChoice),
     // Events
     Group(GroupChoice),
     Date(String),
@@ -46,6 +47,28 @@ pub enum Field {
     Rule(String),
     Url(String),
     Cancelled(String),
+}
+
+/// An entry in the list picker: one of your lists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListChoice {
+    id: String,
+    name: String,
+}
+
+impl std::fmt::Display for ListChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.name)
+    }
+}
+
+impl ListChoice {
+    fn of(list: &ListInfo) -> Self {
+        Self {
+            id: list.id.clone(),
+            name: list.name.clone(),
+        }
+    }
 }
 
 /// An entry in the event form's group picker.
@@ -90,7 +113,8 @@ pub enum Editor {
 /// State shared by both forms.
 struct Common {
     is_new: bool,
-    source: Source,
+    /// The list it's saved to; always one you own.
+    list_id: String,
     description: text_editor::Content,
     /// `None` until one is chosen. Existing countywide records keep that value,
     /// though it can no longer be picked.
@@ -108,7 +132,7 @@ struct Common {
 impl Common {
     fn new(
         is_new: bool,
-        source: Source,
+        list_id: &str,
         description: &str,
         neighborhood: &str,
         place: &str,
@@ -117,7 +141,7 @@ impl Common {
     ) -> Self {
         Self {
             is_new,
-            source,
+            list_id: list_id.into(),
             description: text_editor::Content::with_text(description),
             neighborhood: find_neighborhood(neighborhood),
             place: place.into(),
@@ -135,6 +159,7 @@ impl Common {
         match field {
             Field::Description(action) => self.description.perform(action.clone()),
             Field::Neighborhood(n) => self.neighborhood = Some(*n),
+            Field::List(choice) => self.list_id = choice.id.clone(),
             Field::Place(s) => self.place = s.clone(),
             Field::CostKind(k) => self.cost_kind = *k,
             Field::CostNote(s) => self.cost_note = s.clone(),
@@ -216,7 +241,7 @@ impl GroupForm {
         Self {
             common: Common::new(
                 is_new,
-                g.source,
+                &g.list_id,
                 &g.description,
                 &g.neighborhood,
                 &g.address,
@@ -293,6 +318,7 @@ impl GroupForm {
                 })
                 .collect(),
             last_verified: verified,
+            list_id: self.common.list_id.clone(),
             ..self.original.clone()
         })
     }
@@ -388,7 +414,7 @@ impl EventForm {
         Self {
             common: Common::new(
                 is_new,
-                e.source,
+                &e.list_id,
                 &e.description,
                 &e.neighborhood,
                 &e.location,
@@ -522,6 +548,7 @@ impl EventForm {
             categories: self.common.categories(),
             tags: self.common.tags(),
             cancelled,
+            list_id: self.common.list_id.clone(),
             ..self.original.clone()
         })
     }
@@ -529,7 +556,7 @@ impl EventForm {
     /// A description of the schedule as entered, or why it's invalid.
     fn preview(&self) -> String {
         let built = self.start().and_then(|start| {
-            let mut e = Event::new(self.common.source, start);
+            let mut e = Event::new(&self.common.list_id, start);
             e.rrule = self.rrule(start)?;
             Ok(e)
         });
@@ -705,6 +732,12 @@ impl Editor {
             Editor::Group(f) => f.view(&app.tags),
             Editor::Event(f) => f.view(&app.groups, &app.hidden, &app.tags),
         };
+        let lists: Vec<ListChoice> = app.owned_lists().map(ListChoice::of).collect();
+        let selected = lists.iter().find(|l| l.id == common.list_id).cloned();
+        let fields = fields.push(labeled(
+            "Save to list",
+            pick_list(lists, selected, |l| Message::Form(Field::List(l))).width(Fill),
+        ));
 
         let mut actions = row![
             button(save).style(button::primary).on_press(Message::Save),
@@ -863,7 +896,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(19, 0, 0)
             .unwrap();
-        let mut e = Event::new(Source::User, start);
+        let mut e = Event::new("list", start);
         e.title = "Game night".into();
         e.neighborhood = "north-park".into();
         e.rrule = Repeat::Weekly.to_rrule(start);
@@ -880,9 +913,9 @@ mod tests {
             .unwrap()
             .and_hms_opt(19, 0, 0)
             .unwrap();
-        let mut shown = Group::new(Source::User);
+        let mut shown = Group::new("list");
         shown.name = "Shown".into();
-        let mut hidden_group = Group::new(Source::User);
+        let mut hidden_group = Group::new("list");
         hidden_group.name = "Hidden".into();
         let groups = [shown, hidden_group.clone()];
         let hidden = HashSet::from([hidden_group.id.clone()]);
@@ -893,11 +926,11 @@ mod tests {
                 .collect()
         };
 
-        let new = EventForm::new(Event::new(Source::User, start), true);
+        let new = EventForm::new(Event::new("list", start), true);
         assert_eq!(names(&new)[1..], ["Shown"]);
 
         // An existing event in a hidden group still shows its group.
-        let mut existing = Event::new(Source::User, start);
+        let mut existing = Event::new("list", start);
         existing.group_id = Some(hidden_group.id.clone());
         assert_eq!(
             names(&EventForm::new(existing, false))[1..],
@@ -911,7 +944,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(22, 0, 0)
             .unwrap();
-        let mut e = Event::new(Source::Defaults, start);
+        let mut e = Event::new("list", start);
         e.title = "Perseids".into();
         e.neighborhood = "countywide".into();
         assert_eq!(EventForm::new(e.clone(), false).build().unwrap(), e);
@@ -923,7 +956,7 @@ mod tests {
             .unwrap()
             .and_hms_opt(19, 0, 0)
             .unwrap();
-        let mut f = EventForm::new(Event::new(Source::User, start), true);
+        let mut f = EventForm::new(Event::new("list", start), true);
         assert!(f.build().is_err(), "title required");
         f.update(Field::Name("x".into()), &[]);
         f.update(Field::Repeat(Repeat::Custom), &[]);

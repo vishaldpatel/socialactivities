@@ -1,0 +1,277 @@
+{
+  "format": 1,
+  "id": "sd-social-activities",
+  "name": "San Diego Social Activities",
+  "description": "Curated groups and events that ship with the app.",
+  "updated_at": "2026-10-24T17:38:54.558175876Z",
+  "groups": [
+    {
+      "id": "f43de669-226b-4fae-a196-7bad7f7a9bd9",
+      "name": "Encinitas Run Club",
+      "description": "Run Club in Encinitas featuring runners of all skill levels.",
+      "neighborhood": "encinitas",
+      "address": "Culture Brewing in Downtown Encinitas",
+      "frequency": "Weekly on Tuesdays",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "after-work",
+        "beginner friendly",
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "website",
+          "url": "https://instagram.com/erc"
+        }
+      ],
+      "last_verified": "2026-10-24"
+    },
+    {
+      "id": "example-spanish-exchange",
+      "name": "Example: Hillcrest Spanish Exchange",
+      "description": "Conversation exchange: half the evening in Spanish, half in English.",
+      "neighborhood": "hillcrest",
+      "address": "Hillcrest",
+      "frequency": "Every other Thursday at 6:30 PM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "chill"
+      ],
+      "tags": [],
+      "links": [
+        {
+          "kind": "website",
+          "url": "https://example.com"
+        }
+      ]
+    },
+    {
+      "id": "example-np-board-games",
+      "name": "Example: North Park Board Game Night",
+      "description": "Open board game night. Plenty of games on hand, or bring your own.",
+      "neighborhood": "north-park",
+      "address": "North Park",
+      "frequency": "Every Tuesday at 7:00 PM",
+      "cost": {
+        "kind": "fee",
+        "note": "$5 suggested donation"
+      },
+      "categories": [
+        "chill"
+      ],
+      "tags": [],
+      "links": [
+        {
+          "kind": "website",
+          "url": "https://example.com"
+        }
+      ]
+    },
+    {
+      "id": "example-ob-salsa",
+      "name": "Example: OB Salsa Social",
+      "description": "Beginner lesson for the first half hour, then open social dancing.",
+      "neighborhood": "ocean-beach",
+      "address": "Ocean Beach",
+      "frequency": "Every Friday at 8:00 PM",
+      "cost": {
+        "kind": "membership",
+        "note": "$40/year, first visit free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [],
+      "links": [
+        {
+          "kind": "website",
+          "url": "https://example.com"
+        }
+      ]
+    },
+    {
+      "id": "example-pb-volleyball",
+      "name": "Example: PB Sunset Volleyball",
+      "description": "Pickup beach volleyball for all levels. Bring water and sunscreen.",
+      "neighborhood": "pacific-beach",
+      "address": "Pacific Beach, near Crystal Pier",
+      "frequency": "Every Saturday at 4:00 PM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [],
+      "links": [
+        {
+          "kind": "website",
+          "url": "https://example.com"
+        }
+      ]
+    },
+    {
+      "id": "example-sunrise-hikers",
+      "name": "Example: Sunrise Hiking Crew",
+      "description": "Moderate morning hikes around the county, followed by coffee.",
+      "neighborhood": "countywide",
+      "address": "Trailhead varies; posted a week ahead",
+      "frequency": "2nd Saturday of the month at 6:30 AM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [],
+      "links": [
+        {
+          "kind": "website",
+          "url": "https://example.com"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "example-pb-volleyball-event",
+      "group_id": "example-pb-volleyball",
+      "title": "Saturday pickup games",
+      "description": "",
+      "neighborhood": "pacific-beach",
+      "location": "Pacific Beach, near Crystal Pier",
+      "start": "2026-10-03T16:00:00",
+      "duration_minutes": 150,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [],
+      "tags": []
+    },
+    {
+      "id": "example-np-board-games-event",
+      "group_id": "example-np-board-games",
+      "title": "Tuesday game night",
+      "description": "",
+      "neighborhood": "north-park",
+      "location": "North Park",
+      "start": "2026-10-06T19:00:00",
+      "duration_minutes": 180,
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "cost": {
+        "kind": "fee",
+        "note": "$5 suggested donation"
+      },
+      "categories": [],
+      "tags": []
+    },
+    {
+      "id": "example-spanish-exchange-event",
+      "group_id": "example-spanish-exchange",
+      "title": "Conversation exchange",
+      "description": "",
+      "neighborhood": "hillcrest",
+      "location": "Hillcrest",
+      "start": "2026-10-08T18:30:00",
+      "duration_minutes": 120,
+      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TH",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [],
+      "tags": []
+    },
+    {
+      "id": "example-ob-salsa-event",
+      "group_id": "example-ob-salsa",
+      "title": "Friday salsa social",
+      "description": "",
+      "neighborhood": "ocean-beach",
+      "location": "Ocean Beach",
+      "start": "2026-10-09T20:00:00",
+      "duration_minutes": 180,
+      "rrule": "FREQ=WEEKLY;BYDAY=FR",
+      "cost": {
+        "kind": "membership",
+        "note": "$40/year, first visit free"
+      },
+      "categories": [],
+      "tags": []
+    },
+    {
+      "id": "example-sunrise-hikers-event",
+      "group_id": "example-sunrise-hikers",
+      "title": "Monthly sunrise hike",
+      "description": "",
+      "neighborhood": "countywide",
+      "location": "Trailhead varies; posted a week ahead",
+      "start": "2026-10-10T06:30:00",
+      "duration_minutes": 180,
+      "rrule": "FREQ=MONTHLY;BYDAY=2SA",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [],
+      "tags": []
+    },
+    {
+      "id": "394f29f7-5e29-4cf1-8d23-db9f2e7a06cb",
+      "group_id": "f43de669-226b-4fae-a196-7bad7f7a9bd9",
+      "title": "Tuesday Evening Run at Culture Brewing",
+      "description": "",
+      "neighborhood": "encinitas",
+      "location": "Culture Brewing in Downtown Encinitas",
+      "start": "2026-10-27T18:00:00",
+      "duration_minutes": 120,
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": []
+    },
+    {
+      "id": "big-bay-boom-2027",
+      "title": "Big Bay Boom (4th of July fireworks)",
+      "description": "Fireworks over San Diego Bay. Arrive early for a spot on the waterfront.",
+      "neighborhood": "downtown",
+      "location": "San Diego Bay waterfront",
+      "start": "2027-07-04T21:00:00",
+      "duration_minutes": 30,
+      "cost": {
+        "kind": "free"
+      },
+      "url": "https://bigbayboom.com",
+      "categories": [
+        "chill"
+      ],
+      "tags": []
+    },
+    {
+      "id": "perseids-2027",
+      "title": "Perseid meteor shower peak",
+      "description": "Head east to Anza-Borrego or the Laguna Mountains for dark skies. Best after midnight.",
+      "neighborhood": "countywide",
+      "location": "Anywhere dark, away from city lights",
+      "start": "2027-08-12T22:00:00",
+      "duration_minutes": 360,
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "chill"
+      ],
+      "tags": []
+    }
+  ]
+}

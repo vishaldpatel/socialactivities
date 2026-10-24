@@ -200,7 +200,6 @@ fn weekday_code(day: Weekday) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Source;
     use chrono::NaiveDate;
 
     fn dt(y: i32, m: u32, d: u32, h: u32) -> NaiveDateTime {
@@ -213,7 +212,7 @@ mod tests {
     #[test]
     fn weekly_occurrences_in_window() {
         // Tuesday 2026-10-06 7pm.
-        let mut e = Event::new(Source::User, dt(2026, 10, 6, 19));
+        let mut e = Event::new("list", dt(2026, 10, 6, 19));
         e.rrule = Repeat::Weekly.to_rrule(e.start);
         let starts = event_starts(&e, dt(2026, 10, 20, 0), dt(2026, 11, 4, 0)).unwrap();
         assert_eq!(
@@ -229,7 +228,7 @@ mod tests {
     #[test]
     fn local_time_is_stable_across_dst() {
         // DST ends 2026-11-01; the meetup should stay at 7pm local.
-        let mut e = Event::new(Source::User, dt(2026, 10, 27, 19));
+        let mut e = Event::new("list", dt(2026, 10, 27, 19));
         e.rrule = Repeat::Weekly.to_rrule(e.start);
         let starts = event_starts(&e, dt(2026, 10, 27, 0), dt(2026, 11, 11, 0)).unwrap();
         assert!(starts.iter().all(|s| s.format("%H").to_string() == "19"));
@@ -238,7 +237,7 @@ mod tests {
 
     #[test]
     fn cancelled_dates_are_skipped() {
-        let mut e = Event::new(Source::User, dt(2026, 10, 6, 19));
+        let mut e = Event::new("list", dt(2026, 10, 6, 19));
         e.rrule = Repeat::Weekly.to_rrule(e.start);
         e.cancelled
             .push(NaiveDate::from_ymd_opt(2026, 10, 27).unwrap());
@@ -254,7 +253,7 @@ mod tests {
             Repeat::MonthlyNthWeekday.to_rrule(start).as_deref(),
             Some("FREQ=MONTHLY;BYDAY=2SA")
         );
-        let mut e = Event::new(Source::User, start);
+        let mut e = Event::new("list", start);
         e.rrule = Repeat::MonthlyNthWeekday.to_rrule(start);
         let starts = event_starts(&e, dt(2026, 11, 1, 0), dt(2027, 1, 1, 0)).unwrap();
         assert_eq!(starts, vec![dt(2026, 11, 14, 9), dt(2026, 12, 12, 9)]);
@@ -262,7 +261,7 @@ mod tests {
 
     #[test]
     fn multi_day_one_off_overlapping_window() {
-        let mut e = Event::new(Source::Defaults, dt(2026, 7, 23, 9));
+        let mut e = Event::new("list", dt(2026, 7, 23, 9));
         e.duration_minutes = 4 * 24 * 60;
         assert_eq!(
             event_starts(&e, dt(2026, 7, 25, 0), dt(2026, 8, 1, 0))

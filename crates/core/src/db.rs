@@ -1,13 +1,13 @@
-//! SQLite schema and queries. The defaults and user databases share one schema.
+//! SQLite schema and queries.
 
 use std::path::Path;
 use std::sync::LazyLock;
 
-use chrono::{NaiveDate, NaiveDateTime};
-use rusqlite::{Connection, OpenFlags, Statement, Transaction, params};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, SecondsFormat, Utc};
+use rusqlite::{Connection, OptionalExtension, Statement, Transaction, params};
 use rusqlite_migration::{M, Migrations};
 
-use crate::model::{Cost, CostKind, Event, Group, Link, Source};
+use crate::model::{Cost, CostKind, Event, Group, Link, ListInfo};
 
 const DATETIME_FMT: &str = "%Y-%m-%dT%H:%M:%S";
 const DATE_FMT: &str = "%Y-%m-%d";
@@ -113,6 +113,28 @@ const SCHEMA: &[&str] = &[
             tag      TEXT NOT NULL,
             PRIMARY KEY (event_id, tag)
         );",
+    // v4: everything belongs to a list. Existing records move into a new
+    // "My List". list_id isn't a foreign key because SQLite can't add one with
+    // ALTER TABLE; the store keeps it consistent.
+    "CREATE TABLE lists (
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            updated_at  TEXT NOT NULL,
+            owned       INTEGER NOT NULL,
+            source      TEXT,
+            update_url  TEXT
+        );
+        ALTER TABLE groups ADD COLUMN list_id TEXT;
+        ALTER TABLE events ADD COLUMN list_id TEXT;
+        CREATE INDEX groups_list ON groups(list_id);
+        CREATE INDEX events_list ON events(list_id);
+        INSERT INTO lists (id, name, updated_at, owned) VALUES
+            (lower(hex(randomblob(16))), 'My List', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), 1);
+        UPDATE groups SET list_id = (SELECT id FROM lists);
+        UPDATE events SET list_id = (SELECT id FROM lists);
+        -- Lists the user removed, so the one shipped with the app isn't reinstalled.
+        CREATE TABLE removed_lists (id TEXT PRIMARY KEY);",
 ];
 
 static MIGRATIONS: LazyLock<Migrations<'static>> =
@@ -124,8 +146,6 @@ pub enum DbError {
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
     Migration(#[from] rusqlite_migration::Error),
-    #[error("database schema version {found} does not match the app's version {expected}")]
-    SchemaMismatch { found: i64, expected: i64 },
     #[error("bad value in column {column}: {value:?}")]
     BadValue { column: &'static str, value: String },
 }
@@ -137,18 +157,6 @@ pub fn open_rw(path: &Path) -> Result<Connection> {
     let mut conn = Connection::open(path)?;
     conn.pragma_update(None, "foreign_keys", true)?;
     MIGRATIONS.to_latest(&mut conn)?;
-    Ok(conn)
-}
-
-/// Opens an existing database read-only. The schema must already be current,
-/// since a read-only connection can't be migrated.
-pub fn open_ro(path: &Path) -> Result<Connection> {
-    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let found: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    let expected = SCHEMA.len() as i64;
-    if found != expected {
-        return Err(DbError::SchemaMismatch { found, expected });
-    }
     Ok(conn)
 }
 
@@ -172,14 +180,14 @@ fn parse_date(column: &'static str, s: String) -> Result<NaiveDate> {
 }
 
 /// Reads a one-column list of strings for one record with a prepared `stmt`.
-fn load_list(stmt: &mut Statement, id: &str) -> Result<Vec<String>> {
+fn load_values(stmt: &mut Statement, id: &str) -> Result<Vec<String>> {
     Ok(stmt
         .query_map([id], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Replaces the `value_col` rows of `table` that belong to record `id`.
-fn replace_list(
+fn replace_values(
     tx: &Transaction,
     (table, id_col, value_col): (&str, &str, &str),
     id: &str,
@@ -198,7 +206,7 @@ const GROUP_TAGS: (&str, &str, &str) = ("group_tags", "group_id", "tag");
 const EVENT_CATEGORIES: (&str, &str, &str) = ("event_categories", "event_id", "category");
 const EVENT_TAGS: (&str, &str, &str) = ("event_tags", "event_id", "tag");
 
-fn list_query<'c>(
+fn values_query<'c>(
     conn: &'c Connection,
     (table, id_col, value_col): (&str, &str, &str),
 ) -> Result<Statement<'c>> {
@@ -207,21 +215,21 @@ fn list_query<'c>(
     ))?)
 }
 
-pub fn load_groups(conn: &Connection, source: Source) -> Result<Vec<Group>> {
-    let mut categories = list_query(conn, GROUP_CATEGORIES)?;
-    let mut tags = list_query(conn, GROUP_TAGS)?;
+pub fn load_groups(conn: &Connection) -> Result<Vec<Group>> {
+    let mut categories = values_query(conn, GROUP_CATEGORIES)?;
+    let mut tags = values_query(conn, GROUP_TAGS)?;
     let mut links =
         conn.prepare("SELECT kind, url FROM group_links WHERE group_id = ?1 ORDER BY position")?;
     let mut stmt = conn.prepare(
         "SELECT id, name, description, logo_path, neighborhood, address, frequency,
-                cost_kind, cost_note, last_verified
+                cost_kind, cost_note, last_verified, list_id
          FROM groups ORDER BY name COLLATE NOCASE",
     )?;
     let rows = stmt.query_map([], |r| {
         Ok((
             Group {
                 id: r.get(0)?,
-                source,
+                list_id: r.get(10)?,
                 name: r.get(1)?,
                 description: r.get(2)?,
                 logo_path: r.get(3)?,
@@ -247,8 +255,8 @@ pub fn load_groups(conn: &Connection, source: Source) -> Result<Vec<Group>> {
         g.last_verified = verified
             .map(|v| parse_date("last_verified", v))
             .transpose()?;
-        g.categories = load_list(&mut categories, &g.id)?;
-        g.tags = load_list(&mut tags, &g.id)?;
+        g.categories = load_values(&mut categories, &g.id)?;
+        g.tags = load_values(&mut tags, &g.id)?;
         g.links = links
             .query_map([&g.id], |r| {
                 Ok(Link {
@@ -264,11 +272,18 @@ pub fn load_groups(conn: &Connection, source: Source) -> Result<Vec<Group>> {
 
 pub fn save_group(conn: &mut Connection, g: &Group) -> Result<()> {
     let tx = conn.transaction()?;
+    put_group(&tx, g)?;
+    tx.commit()?;
+    Ok(())
+}
+
+fn put_group(tx: &Transaction, g: &Group) -> Result<()> {
     tx.execute(
         "INSERT INTO groups (id, name, description, logo_path, neighborhood, address,
-                             frequency, cost_kind, cost_note, last_verified)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                             frequency, cost_kind, cost_note, last_verified, list_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT(id) DO UPDATE SET
+            list_id = excluded.list_id,
             name = excluded.name, description = excluded.description,
             logo_path = excluded.logo_path, neighborhood = excluded.neighborhood,
             address = excluded.address, frequency = excluded.frequency,
@@ -285,10 +300,11 @@ pub fn save_group(conn: &mut Connection, g: &Group) -> Result<()> {
             g.cost.kind.as_str(),
             g.cost.note,
             g.last_verified.map(|d| d.format(DATE_FMT).to_string()),
+            g.list_id,
         ],
     )?;
-    replace_list(&tx, GROUP_CATEGORIES, &g.id, &g.categories)?;
-    replace_list(&tx, GROUP_TAGS, &g.id, &g.tags)?;
+    replace_values(tx, GROUP_CATEGORIES, &g.id, &g.categories)?;
+    replace_values(tx, GROUP_TAGS, &g.id, &g.tags)?;
     tx.execute("DELETE FROM group_links WHERE group_id = ?1", [&g.id])?;
     for (i, link) in g.links.iter().enumerate() {
         tx.execute(
@@ -296,27 +312,30 @@ pub fn save_group(conn: &mut Connection, g: &Group) -> Result<()> {
             params![g.id, i as i64, link.kind, link.url],
         )?;
     }
-    tx.commit()?;
     Ok(())
 }
 
-/// Deletes a group and the events in the same database that belong to it.
-pub fn delete_group(conn: &mut Connection, id: &str) -> Result<()> {
+/// Deletes a group and its events in the same list. Events in other lists
+/// that refer to it are left, without a group.
+pub fn delete_group(conn: &mut Connection, id: &str, list_id: &str) -> Result<()> {
     let tx = conn.transaction()?;
-    tx.execute("DELETE FROM events WHERE group_id = ?1", [id])?;
+    tx.execute(
+        "DELETE FROM events WHERE group_id = ?1 AND list_id = ?2",
+        [id, list_id],
+    )?;
     tx.execute("DELETE FROM groups WHERE id = ?1", [id])?;
     tx.commit()?;
     Ok(())
 }
 
-pub fn load_events(conn: &Connection, source: Source) -> Result<Vec<Event>> {
-    let mut categories = list_query(conn, EVENT_CATEGORIES)?;
-    let mut tags = list_query(conn, EVENT_TAGS)?;
+pub fn load_events(conn: &Connection) -> Result<Vec<Event>> {
+    let mut categories = values_query(conn, EVENT_CATEGORIES)?;
+    let mut tags = values_query(conn, EVENT_TAGS)?;
     let mut cancelled =
         conn.prepare("SELECT date FROM event_cancellations WHERE event_id = ?1 ORDER BY date")?;
     let mut stmt = conn.prepare(
         "SELECT id, group_id, title, description, neighborhood, location, start,
-                duration_minutes, rrule, cost_kind, cost_note, url
+                duration_minutes, rrule, cost_kind, cost_note, url, list_id
          FROM events ORDER BY start",
     )?;
     let rows = stmt.query_map([], |r| {
@@ -324,7 +343,7 @@ pub fn load_events(conn: &Connection, source: Source) -> Result<Vec<Event>> {
             r.get::<_, String>(6)?,
             Event {
                 id: r.get(0)?,
-                source,
+                list_id: r.get(12)?,
                 group_id: r.get(1)?,
                 title: r.get(2)?,
                 description: r.get(3)?,
@@ -349,8 +368,8 @@ pub fn load_events(conn: &Connection, source: Source) -> Result<Vec<Event>> {
     for row in rows {
         let (start, mut e) = row?;
         e.start = parse_datetime(start)?;
-        e.categories = load_list(&mut categories, &e.id)?;
-        e.tags = load_list(&mut tags, &e.id)?;
+        e.categories = load_values(&mut categories, &e.id)?;
+        e.tags = load_values(&mut tags, &e.id)?;
         e.cancelled = cancelled
             .query_map([&e.id], |r| r.get::<_, String>(0))?
             .map(|d| parse_date("date", d?))
@@ -362,11 +381,18 @@ pub fn load_events(conn: &Connection, source: Source) -> Result<Vec<Event>> {
 
 pub fn save_event(conn: &mut Connection, e: &Event) -> Result<()> {
     let tx = conn.transaction()?;
+    put_event(&tx, e)?;
+    tx.commit()?;
+    Ok(())
+}
+
+fn put_event(tx: &Transaction, e: &Event) -> Result<()> {
     tx.execute(
         "INSERT INTO events (id, group_id, title, description, neighborhood, location, start,
-                             duration_minutes, rrule, cost_kind, cost_note, url)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                             duration_minutes, rrule, cost_kind, cost_note, url, list_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
          ON CONFLICT(id) DO UPDATE SET
+            list_id = excluded.list_id,
             group_id = excluded.group_id, title = excluded.title,
             description = excluded.description, neighborhood = excluded.neighborhood,
             location = excluded.location, start = excluded.start,
@@ -385,16 +411,15 @@ pub fn save_event(conn: &mut Connection, e: &Event) -> Result<()> {
             e.cost.kind.as_str(),
             e.cost.note,
             e.url,
+            e.list_id,
         ],
     )?;
-    replace_children(&tx, e)?;
-    tx.commit()?;
-    Ok(())
+    replace_children(tx, e)
 }
 
 fn replace_children(tx: &Transaction, e: &Event) -> Result<()> {
-    replace_list(tx, EVENT_CATEGORIES, &e.id, &e.categories)?;
-    replace_list(tx, EVENT_TAGS, &e.id, &e.tags)?;
+    replace_values(tx, EVENT_CATEGORIES, &e.id, &e.categories)?;
+    replace_values(tx, EVENT_TAGS, &e.id, &e.tags)?;
     tx.execute(
         "DELETE FROM event_cancellations WHERE event_id = ?1",
         [&e.id],
@@ -410,6 +435,158 @@ fn replace_children(tx: &Transaction, e: &Event) -> Result<()> {
 
 pub fn delete_event(conn: &Connection, id: &str) -> Result<()> {
     conn.execute("DELETE FROM events WHERE id = ?1", [id])?;
+    Ok(())
+}
+
+/// Full precision, so a timestamp read back compares equal to the one written
+/// (an update is only applied when strictly newer).
+fn format_timestamp(t: DateTime<Utc>) -> String {
+    t.to_rfc3339_opts(SecondsFormat::AutoSi, true)
+}
+
+fn parse_timestamp(s: String) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(&s)
+        .map(|t| t.with_timezone(&Utc))
+        .map_err(|_| DbError::BadValue {
+            column: "updated_at",
+            value: s,
+        })
+}
+
+/// Lists you own first, then by name.
+pub fn load_lists(conn: &Connection) -> Result<Vec<ListInfo>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, updated_at, owned, source, update_url
+         FROM lists ORDER BY owned DESC, name COLLATE NOCASE",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(3)?,
+            ListInfo {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                description: r.get(2)?,
+                updated_at: DateTime::default(),
+                owned: r.get(4)?,
+                source: r.get(5)?,
+                update_url: r.get(6)?,
+            },
+        ))
+    })?;
+    rows.map(|row| {
+        let (updated_at, mut list) = row?;
+        list.updated_at = parse_timestamp(updated_at)?;
+        Ok(list)
+    })
+    .collect()
+}
+
+fn put_list(tx: &Transaction, l: &ListInfo) -> Result<()> {
+    tx.execute(
+        "INSERT INTO lists (id, name, description, updated_at, owned, source, update_url)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name, description = excluded.description,
+            updated_at = excluded.updated_at, owned = excluded.owned,
+            source = excluded.source, update_url = excluded.update_url",
+        params![
+            l.id,
+            l.name,
+            l.description,
+            format_timestamp(l.updated_at),
+            l.owned,
+            l.source,
+            l.update_url,
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn save_list(conn: &mut Connection, l: &ListInfo) -> Result<()> {
+    let tx = conn.transaction()?;
+    put_list(&tx, l)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Marks a list's contents as changed at `at`.
+pub fn touch_list(conn: &Connection, id: &str, at: DateTime<Utc>) -> Result<()> {
+    conn.execute(
+        "UPDATE lists SET updated_at = ?2 WHERE id = ?1",
+        [id, &format_timestamp(at)],
+    )?;
+    Ok(())
+}
+
+/// The list a group or event (by `table`) currently belongs to.
+pub fn list_of(conn: &Connection, table: Table, id: &str) -> Result<Option<String>> {
+    let sql = format!("SELECT list_id FROM {} WHERE id = ?1", table.name());
+    Ok(conn
+        .query_row(&sql, [id], |r| r.get(0))
+        .optional()?
+        .flatten())
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Table {
+    Groups,
+    Events,
+}
+
+impl Table {
+    fn name(self) -> &'static str {
+        match self {
+            Table::Groups => "groups",
+            Table::Events => "events",
+        }
+    }
+}
+
+/// Deletes a list and everything in it, and remembers that it was removed.
+pub fn delete_list(conn: &mut Connection, id: &str) -> Result<()> {
+    let tx = conn.transaction()?;
+    clear_list(&tx, id)?;
+    tx.execute("DELETE FROM lists WHERE id = ?1", [id])?;
+    tx.execute("INSERT OR IGNORE INTO removed_lists (id) VALUES (?1)", [id])?;
+    tx.commit()?;
+    Ok(())
+}
+
+pub fn was_removed(conn: &Connection, id: &str) -> Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM removed_lists WHERE id = ?1",
+            [id],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
+fn clear_list(tx: &Transaction, id: &str) -> Result<()> {
+    tx.execute("DELETE FROM events WHERE list_id = ?1", [id])?;
+    tx.execute("DELETE FROM groups WHERE list_id = ?1", [id])?;
+    Ok(())
+}
+
+/// Writes a list and replaces all of its groups and events, atomically.
+pub fn replace_list(
+    conn: &mut Connection,
+    list: &ListInfo,
+    groups: &[Group],
+    events: &[Event],
+) -> Result<()> {
+    let tx = conn.transaction()?;
+    put_list(&tx, list)?;
+    tx.execute("DELETE FROM removed_lists WHERE id = ?1", [&list.id])?;
+    clear_list(&tx, &list.id)?;
+    for g in groups {
+        put_group(&tx, g)?;
+    }
+    for e in events {
+        put_event(&tx, e)?;
+    }
+    tx.commit()?;
     Ok(())
 }
 
@@ -437,8 +614,31 @@ pub fn set_hidden(conn: &Connection, group_id: &str, hidden: bool) -> Result<()>
 mod tests {
     use super::*;
 
-    fn list(conn: &Connection, table: (&str, &str, &str), id: &str) -> Vec<String> {
-        load_list(&mut list_query(conn, table).unwrap(), id).unwrap()
+    fn values(conn: &Connection, table: (&str, &str, &str), id: &str) -> Vec<String> {
+        load_values(&mut values_query(conn, table).unwrap(), id).unwrap()
+    }
+
+    #[test]
+    fn v4_moves_existing_records_into_my_list() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(SCHEMA[..3].iter().map(|sql| M::up(sql)).collect())
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO groups (id, name, neighborhood) VALUES ('g', 'G', 'x');
+             INSERT INTO events (id, title, neighborhood, start, duration_minutes) VALUES
+                ('e', 'E', 'x', '2027-08-12T22:00:00', 60);",
+        )
+        .unwrap();
+
+        MIGRATIONS.to_latest(&mut conn).unwrap();
+
+        let lists = load_lists(&conn).unwrap();
+        assert_eq!(lists.len(), 1);
+        assert_eq!(lists[0].name, "My List");
+        assert!(lists[0].owned);
+        assert_eq!(load_groups(&conn).unwrap()[0].list_id, lists[0].id);
+        assert_eq!(load_events(&conn).unwrap()[0].list_id, lists[0].id);
     }
 
     #[test]
@@ -464,12 +664,12 @@ mod tests {
 
         MIGRATIONS.to_latest(&mut conn).unwrap();
 
-        assert_eq!(list(&conn, GROUP_CATEGORIES, "run"), ["active"]);
-        assert_eq!(list(&conn, GROUP_CATEGORIES, "games"), ["chill"]);
-        assert_eq!(list(&conn, GROUP_CATEGORIES, "both"), ["active", "chill"]);
-        assert_eq!(list(&conn, EVENT_CATEGORIES, "stars"), ["chill"]);
-        assert_eq!(list(&conn, EVENT_CATEGORIES, "hike"), ["active"]);
-        assert!(list(&conn, GROUP_TAGS, "run").is_empty());
-        assert!(list(&conn, EVENT_TAGS, "stars").is_empty());
+        assert_eq!(values(&conn, GROUP_CATEGORIES, "run"), ["active"]);
+        assert_eq!(values(&conn, GROUP_CATEGORIES, "games"), ["chill"]);
+        assert_eq!(values(&conn, GROUP_CATEGORIES, "both"), ["active", "chill"]);
+        assert_eq!(values(&conn, EVENT_CATEGORIES, "stars"), ["chill"]);
+        assert_eq!(values(&conn, EVENT_CATEGORIES, "hike"), ["active"]);
+        assert!(values(&conn, GROUP_TAGS, "run").is_empty());
+        assert!(values(&conn, EVENT_TAGS, "stars").is_empty());
     }
 }

@@ -154,7 +154,7 @@ fn occurrence<'a>(
     } else if let Some(g) = group {
         actions = actions.extend(link_buttons(g).take(1));
     }
-    if app.can_edit(event.source) {
+    if app.can_edit(&event.list_id) {
         actions = actions.push(
             button(text("Edit").size(13))
                 .style(button::text)
@@ -275,7 +275,7 @@ fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
     if let Some(next) = next {
         body = body.push(text(next).size(14));
     }
-    if app.is_admin() {
+    if app.can_edit(&g.list_id) {
         body = body.push(ui::muted(match g.last_verified {
             Some(d) => format!("Last verified {d}"),
             None => "Never verified".into(),
@@ -296,7 +296,7 @@ fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
                 .on_press(Message::NewEvent(Some(g.id.clone()))),
         );
     }
-    if app.can_edit(g.source) {
+    if app.can_edit(&g.list_id) {
         actions = actions.push(
             button(text("Edit").size(13))
                 .style(button::text)

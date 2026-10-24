@@ -6,9 +6,11 @@ use iced::widget::{button, checkbox, column, row, rule, scrollable, space, text_
 use iced::{Element, Fill, Task};
 use sdsa_core::catalog::CATEGORIES;
 use sdsa_core::recurrence;
-use sdsa_core::{Event, Group, Occurrence, Source, Store};
+use sdsa_core::store::Installed;
+use sdsa_core::{Event, Group, ListFile, ListInfo, Occurrence, Store};
 
 use crate::form::{self, Editor, Record};
+use crate::lists::{self, Lists, UpdateState};
 use crate::location::{self, Area};
 use crate::{list, search, ui};
 
@@ -16,6 +18,7 @@ use crate::{list, search, ui};
 pub enum Tab {
     Events,
     Groups,
+    Lists,
 }
 
 /// How upcoming events are grouped under headings.
@@ -76,6 +79,14 @@ pub struct Filters {
 }
 
 impl Filters {
+    /// Whether anything narrows the results.
+    pub fn is_active(&self) -> bool {
+        !self.search.trim().is_empty()
+            || self.area != Area::All
+            || !self.categories.is_empty()
+            || !self.tags.is_empty()
+    }
+
     fn matches_text(&self, fields: &[&str]) -> bool {
         self.search.trim().is_empty() || fields.iter().any(|f| search::matches(f, &self.search))
     }
@@ -138,6 +149,7 @@ pub enum Message {
     NewEvent(Option<String>),
     EditEvent(String),
     Form(form::Field),
+    Lists(lists::Msg),
     Save,
     Cancel,
     Delete,
@@ -146,8 +158,10 @@ pub enum Message {
 
 pub struct App {
     store: Store,
-    defaults_path: PathBuf,
-    user_path: PathBuf,
+    /// The folder holding the database; relative logo paths resolve against it.
+    data_dir: PathBuf,
+    pub list_infos: Vec<ListInfo>,
+    pub lists: Lists,
     pub groups: Vec<Group>,
     pub events: Vec<Event>,
     pub hidden: HashSet<String>,
@@ -167,12 +181,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(store: Store, defaults_path: PathBuf, user_path: PathBuf) -> Self {
-        let status = store.defaults_warning.clone().map(|w| (w, true));
+    pub fn new(store: Store, db_path: PathBuf, status: Option<(String, bool)>) -> Self {
         let mut app = Self {
             store,
-            defaults_path,
-            user_path,
+            data_dir: db_path.parent().map(Path::to_path_buf).unwrap_or_default(),
+            list_infos: Vec::new(),
+            lists: Lists::default(),
             groups: Vec::new(),
             events: Vec::new(),
             hidden: HashSet::new(),
@@ -191,19 +205,17 @@ impl App {
     }
 
     pub fn title(&self) -> String {
-        if self.store.is_admin() {
-            "Social Activities — Admin".into()
-        } else {
-            "Social Activities!".into()
-        }
+        "Social Activities!".into()
     }
 
-    pub fn is_admin(&self) -> bool {
-        self.store.is_admin()
+    /// Whether records in `list_id` can be edited: only lists you own.
+    pub fn can_edit(&self, list_id: &str) -> bool {
+        self.list_infos.iter().any(|l| l.id == list_id && l.owned)
     }
 
-    pub fn can_edit(&self, source: Source) -> bool {
-        self.store.can_edit(source)
+    /// Lists you own, which new and edited records can be saved into.
+    pub fn owned_lists(&self) -> impl Iterator<Item = &ListInfo> {
+        self.list_infos.iter().filter(|l| l.owned)
     }
 
     /// Hidden groups that still exist; the hidden list can outlive a group
@@ -219,30 +231,57 @@ impl App {
         id.and_then(|id| self.groups.iter().find(|g| g.id == id))
     }
 
-    /// Resolves a group's logo, with relative paths taken from its database's folder.
+    /// Resolves a group's logo, with relative paths taken from the database's folder.
     pub fn logo_path(&self, g: &Group) -> Option<PathBuf> {
         let logo = Path::new(g.logo_path.as_deref()?);
-        let db = match g.source {
-            Source::Defaults => &self.defaults_path,
-            Source::User => &self.user_path,
-        };
-        let path = match db.parent() {
-            Some(dir) if logo.is_relative() => dir.join(logo),
-            _ => logo.to_path_buf(),
+        let path = if logo.is_relative() {
+            self.data_dir.join(logo)
+        } else {
+            logo.to_path_buf()
         };
         path.exists().then_some(path)
+    }
+
+    /// The list new records go into: the one given if it's yours, else your
+    /// first list (created if you have none).
+    fn target_list(&mut self, preferred: Option<&str>) -> Option<String> {
+        if let Some(id) = preferred.filter(|id| self.can_edit(id)) {
+            return Some(id.to_string());
+        }
+        match self.store.default_list() {
+            Ok(list) => {
+                if !self.can_edit(&list.id) {
+                    self.reload();
+                }
+                Some(list.id)
+            }
+            Err(e) => {
+                self.error(e);
+                None
+            }
+        }
+    }
+
+    fn error(&mut self, e: impl std::fmt::Display) {
+        self.status = Some((e.to_string(), true));
+    }
+
+    fn info(&mut self, msg: impl Into<String>) {
+        self.status = Some((msg.into(), false));
     }
 
     fn reload(&mut self) {
         let loaded = (|| -> sdsa_core::store::Result<_> {
             Ok((
+                self.store.lists()?,
                 self.store.groups()?,
                 self.store.events()?,
                 self.store.hidden_groups()?,
             ))
         })();
         match loaded {
-            Ok((groups, events, hidden)) => {
+            Ok((lists, groups, events, hidden)) => {
+                self.list_infos = lists;
                 self.groups = groups;
                 self.events = events;
                 self.hidden = hidden;
@@ -299,37 +338,40 @@ impl App {
             }
             Message::SetHidden(id, hidden) => match self.store.set_hidden(&id, hidden) {
                 Ok(()) => self.reload(),
-                Err(e) => self.status = Some((e.to_string(), true)),
+                Err(e) => self.error(e),
             },
             Message::OpenUrl(url) => {
                 if let Err(e) = open::that_detached(&url) {
-                    self.status = Some((format!("Couldn't open {url}: {e}"), true));
+                    self.error(format!("Couldn't open {url}: {e}"));
                 }
             }
             Message::NewGroup => {
-                let group = Group::new(self.store.new_record_source());
-                self.editor = Some(Editor::Group(form::GroupForm::new(group, true)));
+                if let Some(list) = self.target_list(None) {
+                    let group = Group::new(&list);
+                    self.editor = Some(Editor::Group(form::GroupForm::new(group, true)));
+                }
             }
             Message::EditGroup(id) => {
-                if let Some(g) = self.group(Some(&id)).filter(|g| self.can_edit(g.source)) {
+                if let Some(g) = self.group(Some(&id)).filter(|g| self.can_edit(&g.list_id)) {
                     self.editor = Some(Editor::Group(form::GroupForm::new(g.clone(), false)));
                 }
             }
             Message::NewEvent(group_id) => {
                 let group = self
                     .group(group_id.as_deref())
-                    .filter(|g| !self.hidden.contains(&g.id));
-                // A user's event for one of their own groups stays with their data.
-                let source = match group {
-                    Some(g) if g.source == Source::User => Source::User,
-                    _ => self.store.new_record_source(),
+                    .filter(|g| !self.hidden.contains(&g.id))
+                    .cloned();
+                // Events for a group in one of your lists go in that list.
+                let Some(list) = self.target_list(group.as_ref().map(|g| g.list_id.as_str()))
+                else {
+                    return Task::none();
                 };
                 let start = recurrence::now_local()
                     .date()
                     .and_hms_opt(18, 0, 0)
                     .unwrap_or_default();
-                let mut f = form::EventForm::new(Event::new(source, start), true);
-                if let Some(g) = group {
+                let mut f = form::EventForm::new(Event::new(&list, start), true);
+                if let Some(g) = &group {
                     f.choose_group(g);
                 }
                 self.editor = Some(Editor::Event(f));
@@ -338,7 +380,7 @@ impl App {
                 if let Some(e) = self
                     .events
                     .iter()
-                    .find(|e| e.id == id && self.can_edit(e.source))
+                    .find(|e| e.id == id && self.can_edit(&e.list_id))
                 {
                     self.editor = Some(Editor::Event(form::EventForm::new(e.clone(), false)));
                 }
@@ -348,12 +390,217 @@ impl App {
                     editor.update(field, &self.groups);
                 }
             }
+            Message::Lists(msg) => return self.update_lists(msg),
             Message::Save => self.save(),
             Message::Cancel => self.editor = None,
             Message::Delete => self.delete(),
             Message::DismissStatus => self.status = None,
         }
         Task::none()
+    }
+
+    fn list_name(&self, id: &str) -> String {
+        self.list_infos
+            .iter()
+            .find(|l| l.id == id)
+            .map_or_else(String::new, |l| l.name.clone())
+    }
+
+    fn update_lists(&mut self, msg: lists::Msg) -> Task<Message> {
+        use lists::Msg;
+        let wrap = Message::Lists;
+        match msg {
+            Msg::NewList => match self.store.create_list("New List") {
+                Ok(list) => {
+                    self.reload();
+                    self.lists.renaming = Some((list.id, list.name));
+                }
+                Err(e) => self.error(e),
+            },
+            Msg::Rename(id) => {
+                let name = self.list_name(&id);
+                self.lists.renaming = Some((id, name));
+            }
+            Msg::RenameText(name) => {
+                if let Some((_, current)) = &mut self.lists.renaming {
+                    *current = name;
+                }
+            }
+            Msg::SaveRename => {
+                if let Some((id, name)) = self.lists.renaming.take() {
+                    if name.trim().is_empty() {
+                        self.lists.renaming = Some((id, name));
+                        self.error("A list needs a name.");
+                    } else if let Err(e) = self.store.rename_list(&id, &name) {
+                        self.error(e);
+                    } else {
+                        self.reload();
+                    }
+                }
+            }
+            Msg::CancelRename => self.lists.renaming = None,
+            Msg::Export(id) => {
+                let name = lists::file_name(&self.list_name(&id));
+                return Task::perform(
+                    lists::in_background(move || lists::save_file(name)),
+                    move |path| wrap(Msg::Exported(id.clone(), path)),
+                );
+            }
+            Msg::Exported(id, Some(path)) => {
+                let written = self
+                    .store
+                    .export(&id)
+                    .map_err(|e| e.to_string())
+                    .and_then(|file| {
+                        std::fs::write(&path, file.to_json() + "\n").map_err(|e| e.to_string())
+                    });
+                match written {
+                    Ok(()) => self.info(format!(
+                        "Exported “{}” to {}",
+                        self.list_name(&id),
+                        path.display()
+                    )),
+                    Err(e) => self.error(format!("Couldn't export: {e}")),
+                }
+            }
+            Msg::Exported(_, None) => {}
+            Msg::Location(s) => self.lists.location = s,
+            Msg::Maintain(on) => self.lists.maintain = on,
+            Msg::Browse => {
+                return Task::perform(lists::in_background(lists::pick_file), move |path| {
+                    wrap(Msg::Browsed(path))
+                });
+            }
+            Msg::Browsed(Some(path)) => self.lists.location = path.display().to_string(),
+            Msg::Browsed(None) => {}
+            Msg::Add => {
+                let location = self.lists.location.trim().to_string();
+                if location.is_empty() || self.lists.adding {
+                    return Task::none();
+                }
+                // Remember local files by absolute path, so later checks find them.
+                let location = if lists::is_url(&location) {
+                    location
+                } else {
+                    std::fs::canonicalize(&location).map_or(location, |p| p.display().to_string())
+                };
+                self.lists.adding = true;
+                let fetching = location.clone();
+                return Task::perform(
+                    lists::in_background(move || lists::read_location(&fetching)),
+                    move |result| {
+                        wrap(Msg::Fetched {
+                            location: location.clone(),
+                            result,
+                        })
+                    },
+                );
+            }
+            Msg::Fetched { location, result } => {
+                self.lists.adding = false;
+                let added = result.and_then(|json| {
+                    let file = ListFile::parse(&json).map_err(|e| e.to_string())?;
+                    let installed = self
+                        .store
+                        .add_list(&file, Some(location), self.lists.maintain)
+                        .map_err(|e| e.to_string())?;
+                    Ok((file, installed))
+                });
+                match added {
+                    Ok((file, installed)) => {
+                        self.lists.location.clear();
+                        self.lists.maintain = false;
+                        self.lists.updates.remove(&file.id);
+                        self.reload();
+                        self.info(match installed {
+                            Installed::Replaced => format!("Replaced “{}”", file.name),
+                            _ => format!("Added “{}”", file.name),
+                        });
+                    }
+                    Err(e) => self.error(e),
+                }
+            }
+            Msg::Remove(id) => {
+                if self.lists.confirm_remove.as_deref() != Some(&id) {
+                    self.lists.confirm_remove = Some(id);
+                    return Task::none();
+                }
+                self.lists.confirm_remove = None;
+                let name = self.list_name(&id);
+                match self.store.remove_list(&id) {
+                    Ok(()) => {
+                        self.lists.updates.remove(&id);
+                        self.reload();
+                        self.info(format!("Removed “{name}”"));
+                    }
+                    Err(e) => self.error(e),
+                }
+            }
+            Msg::CancelRemove => self.lists.confirm_remove = None,
+            Msg::Check(id) => return self.check_for_update(id),
+            Msg::CheckAll => {
+                let ids: Vec<String> = self
+                    .list_infos
+                    .iter()
+                    .filter(|l| !l.owned && l.update_location().is_some())
+                    .map(|l| l.id.clone())
+                    .collect();
+                return Task::batch(ids.into_iter().map(|id| self.check_for_update(id)));
+            }
+            Msg::Checked { id, result } => {
+                let state = result
+                    .and_then(|json| ListFile::parse(&json).map_err(|e| e.to_string()))
+                    .and_then(|file| {
+                        if file.id != id {
+                            return Err(format!(
+                                "That location now has a different list, “{}”.",
+                                file.name
+                            ));
+                        }
+                        match self.store.is_update(&file) {
+                            Ok(true) => Ok(UpdateState::Available(Box::new(file))),
+                            Ok(false) => Ok(UpdateState::UpToDate),
+                            Err(e) => Err(e.to_string()),
+                        }
+                    })
+                    .unwrap_or_else(UpdateState::Failed);
+                self.lists.updates.insert(id, state);
+            }
+            Msg::Update(id) => {
+                if let Some(UpdateState::Available(file)) = self.lists.updates.remove(&id) {
+                    match self.store.update_list(&file) {
+                        Ok(_) => {
+                            self.reload();
+                            self.info(format!("Updated “{}”", file.name));
+                        }
+                        Err(e) => self.error(e),
+                    }
+                }
+            }
+        }
+        Task::none()
+    }
+
+    fn check_for_update(&mut self, id: String) -> Task<Message> {
+        let Some(location) = self
+            .list_infos
+            .iter()
+            .find(|l| l.id == id)
+            .and_then(|l| l.update_location())
+            .map(str::to_string)
+        else {
+            return Task::none();
+        };
+        self.lists.updates.insert(id.clone(), UpdateState::Checking);
+        Task::perform(
+            lists::in_background(move || lists::read_location(&location)),
+            move |result| {
+                Message::Lists(lists::Msg::Checked {
+                    id: id.clone(),
+                    result,
+                })
+            },
+        )
     }
 
     fn save(&mut self) {
@@ -405,6 +652,7 @@ impl App {
             (Some(editor), _) => editor.view(self),
             (None, Tab::Events) => list::events(self),
             (None, Tab::Groups) => list::groups(self),
+            (None, Tab::Lists) => lists::view(self),
         };
 
         let mut content = column![].spacing(12).padding(16).width(Fill);
@@ -439,10 +687,7 @@ impl App {
                 .on_press(Message::Tab(tab))
         };
 
-        let mut header = column![ui::heading("Social Activities!")].spacing(4);
-        if self.is_admin() {
-            header = header.push(ui::chip("Admin: editing curated defaults"));
-        }
+        let header = ui::heading("Social Activities!");
 
         let categories = column(CATEGORIES.iter().map(|c| {
             checkbox(self.filters.categories.contains(c.slug))
@@ -470,12 +715,24 @@ impl App {
             .into()
         };
 
+        let mut search_header = row![ui::bold("Search"), space::horizontal()].align_y(iced::Center);
+        if self.filters.is_active() {
+            search_header = search_header.push(
+                button(iced::widget::text("Reset").size(14))
+                    // No vertical padding, so it's shorter than the "Search" label
+                    // and showing it doesn't change the header's height.
+                    .padding([0, 6])
+                    .style(button::text)
+                    .on_press(Message::ClearFilters),
+            );
+        }
+
         let sidebar = column![
             header,
             tab("Events", Tab::Events),
             tab("Groups", Tab::Groups),
             rule::horizontal(1),
-            ui::bold("Search"),
+            search_header,
             text_input("Search…", &self.filters.search).on_input(Message::Search),
             location::area_picker(self.filters.area),
             space::vertical().height(SECTION_GAP),
@@ -484,16 +741,19 @@ impl App {
             space::vertical().height(SECTION_GAP),
             ui::muted("Tags"),
             tags,
-            button("Clear Search")
-                .style(button::text)
-                .on_press(Message::ClearFilters),
-            space::vertical(),
         ]
         .spacing(10)
-        .padding(16)
-        .width(240);
+        .padding(16);
 
-        scrollable(sidebar).height(Fill).into()
+        // Lists are managed rarely, so they sit at the bottom, outside the scroll.
+        let footer = column![rule::horizontal(1), tab("Lists", Tab::Lists)]
+            .spacing(10)
+            .padding(iced::Padding::new(0.0).left(16).right(16).bottom(16));
+
+        column![scrollable(sidebar).height(Fill), footer]
+            .width(240)
+            .height(Fill)
+            .into()
     }
 }
 
@@ -502,9 +762,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn filters_know_when_they_narrow_results() {
+        let mut filters = Filters::default();
+        assert!(!filters.is_active());
+        filters.search = "  ".into();
+        assert!(!filters.is_active(), "blank search doesn't count");
+        filters.search = "run".into();
+        assert!(filters.is_active());
+        filters = Filters::default();
+        filters.tags.insert("running".into());
+        assert!(filters.is_active());
+        filters = Filters {
+            area: Area::Region(sdsa_core::catalog::Region::NorthCounty),
+            ..Filters::default()
+        };
+        assert!(filters.is_active());
+    }
+
+    #[test]
     fn hidden_and_visible_views_split_groups() {
-        let shown = Group::new(Source::User);
-        let hidden_group = Group::new(Source::User);
+        let shown = Group::new("list");
+        let hidden_group = Group::new("list");
         let hidden = HashSet::from([hidden_group.id.clone()]);
         let filters = Filters::default();
         assert!(filters.group(&shown, &hidden, false));
@@ -515,9 +793,9 @@ mod tests {
 
     #[test]
     fn tags_must_all_match_and_include_group_tags() {
-        let mut group = Group::new(Source::User);
+        let mut group = Group::new("list");
         group.tags = vec!["beginner friendly".into()];
-        let mut event = Event::new(Source::User, Default::default());
+        let mut event = Event::new("list", Default::default());
         event.tags = vec!["night".into()];
         let hidden = HashSet::new();
 

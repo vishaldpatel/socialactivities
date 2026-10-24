@@ -186,7 +186,7 @@ pub fn chip<'a, M: 'a>(label: &'a str) -> Element<'a, M> {
         .into()
 }
 
-pub fn banner<'a, M: 'a>(message: &'a str, is_error: bool) -> Element<'a, M> {
+pub fn banner<'a, M: 'a>(message: impl text::IntoFragment<'a>, is_error: bool) -> Element<'a, M> {
     container(text(message).size(14))
         .padding(8)
         .width(iced::Fill)

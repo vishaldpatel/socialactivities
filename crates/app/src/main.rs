@@ -1,6 +1,7 @@
 mod app;
 mod form;
 mod list;
+mod lists;
 mod location;
 mod search;
 mod ui;
@@ -8,62 +9,37 @@ mod ui;
 use std::cell::Cell;
 use std::path::PathBuf;
 
-use sdsa_core::Store;
+use sdsa_core::store::Installed;
+use sdsa_core::{ListFile, Store};
 
 const USAGE: &str = "\
-usage: sdsa [--admin] [--defaults PATH] [--user PATH]
+usage: sdsa [--user PATH]
 
-  --admin          edit the curated defaults database instead of only your own data
-  --defaults PATH  curated defaults database (also: SDSA_DEFAULTS)
-  --user PATH      your personal database (default: platform data directory)";
+  --user PATH  your database (default: platform data directory)";
 
 /// Draws the whole interface this much larger than Iced's defaults.
 const SCALE: f32 = 1.25;
 
+/// The curated list that ships with the app. Installed on first run and
+/// replaced whenever a newer copy ships, unless you maintain it or removed it.
+const BUNDLED_LIST: &str = include_str!("../../../data/defaults.json");
+
 struct Args {
-    admin: bool,
-    defaults: Option<PathBuf>,
     user: Option<PathBuf>,
 }
 
 impl Args {
     fn parse() -> Result<Self, String> {
-        let mut args = Args {
-            admin: false,
-            defaults: None,
-            user: None,
-        };
+        let mut args = Args { user: None };
         let mut it = std::env::args().skip(1);
         while let Some(arg) = it.next() {
             match arg.as_str() {
-                "--admin" => args.admin = true,
-                "--defaults" => {
-                    args.defaults = Some(it.next().ok_or("--defaults needs a path")?.into())
-                }
                 "--user" => args.user = Some(it.next().ok_or("--user needs a path")?.into()),
                 "-h" | "--help" => return Err(USAGE.into()),
                 other => return Err(format!("unknown argument {other:?}\n\n{USAGE}")),
             }
         }
         Ok(args)
-    }
-}
-
-/// The curated defaults: an explicit path, then `defaults.sqlite` next to the
-/// executable (how releases ship it), then the copy in this repository.
-fn defaults_path(arg: Option<PathBuf>) -> PathBuf {
-    if let Some(p) = arg.or_else(|| std::env::var_os("SDSA_DEFAULTS").map(PathBuf::from)) {
-        return p;
-    }
-    let beside_exe = std::env::current_exe()
-        .ok()
-        .and_then(|exe| Some(exe.parent()?.join("defaults.sqlite")));
-    match beside_exe {
-        Some(p) if p.exists() => p,
-        _ => PathBuf::from(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../data/defaults.sqlite"
-        )),
     }
 }
 
@@ -78,14 +54,26 @@ fn user_path(arg: Option<PathBuf>) -> Result<PathBuf, String> {
     Ok(dir.join("user.sqlite"))
 }
 
+/// Installs or updates the bundled list, returning a message worth showing.
+fn install_bundled(store: &mut Store) -> Option<(String, bool)> {
+    let result = ListFile::parse(BUNDLED_LIST)
+        .map_err(sdsa_core::store::StoreError::from)
+        .and_then(|file| Ok((store.install_bundled(&file)?, file.name)));
+    match result {
+        Ok((Installed::Replaced, name)) => Some((format!("Updated “{name}”"), false)),
+        Ok(_) => None,
+        Err(e) => Some((format!("Couldn't install the built-in list: {e}"), true)),
+    }
+}
+
 fn main() -> iced::Result {
-    let store = match Args::parse().and_then(|args| {
-        let user = user_path(args.user)?;
-        let defaults = defaults_path(args.defaults);
-        Store::open(&defaults, &user, args.admin)
-            .map(|store| (store, defaults, user))
-            .map_err(|e| e.to_string())
-    }) {
+    let opened = Args::parse().and_then(|args| {
+        let path = user_path(args.user)?;
+        let mut store = Store::open(&path).map_err(|e| e.to_string())?;
+        let status = install_bundled(&mut store);
+        Ok((store, path, status))
+    });
+    let opened = match opened {
         Ok(opened) => opened,
         Err(msg) => {
             eprintln!("{msg}");
@@ -94,11 +82,11 @@ fn main() -> iced::Result {
     };
 
     // `boot` must be `Fn`, but it only runs once.
-    let store = Cell::new(Some(store));
+    let opened = Cell::new(Some(opened));
     iced::application(
         move || {
-            let (store, defaults, user) = store.take().expect("application booted twice");
-            app::App::new(store, defaults, user)
+            let (store, path, status) = opened.take().expect("application booted twice");
+            app::App::new(store, path, status)
         },
         app::App::update,
         app::App::view,

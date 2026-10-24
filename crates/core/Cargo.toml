@@ -10,5 +10,7 @@ chrono.workspace = true
 rrule.workspace = true
 rusqlite.workspace = true
 rusqlite_migration.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 uuid.workspace = true

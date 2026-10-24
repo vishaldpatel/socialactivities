@@ -1,12 +1,29 @@
-use chrono::{NaiveDate, NaiveDateTime, TimeDelta};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeDelta, Utc};
 
-/// Which database a record lives in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Source {
-    /// Curated data shipped with the app.
-    Defaults,
-    /// Data the user added on their own machine.
-    User,
+/// A named collection of groups and events. Every group and event belongs to
+/// exactly one list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    /// When the list's contents last changed; decides whether an update is newer.
+    pub updated_at: DateTime<Utc>,
+    /// Lists you own can be edited and renamed. Lists added from elsewhere are
+    /// read-only and change only through updates.
+    pub owned: bool,
+    /// The URL or file path the list was added from.
+    pub source: Option<String>,
+    /// Where the list's author publishes updates, if they said.
+    pub update_url: Option<String>,
+}
+
+impl ListInfo {
+    /// Where to look for a newer version: the author's update URL, else
+    /// wherever the list was added from.
+    pub fn update_location(&self) -> Option<&str> {
+        self.update_url.as_deref().or(self.source.as_deref())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -74,10 +91,11 @@ pub struct Link {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Group {
     pub id: String,
-    pub source: Source,
+    pub list_id: String,
     pub name: String,
     pub description: String,
-    /// Path to a logo image, relative paths resolve against the database's directory.
+    /// Local path to a logo image (relative paths resolve against the database's
+    /// directory). Not included when a list is exported.
     pub logo_path: Option<String>,
     pub neighborhood: String,
     pub address: String,
@@ -93,10 +111,10 @@ pub struct Group {
 }
 
 impl Group {
-    pub fn new(source: Source) -> Self {
+    pub fn new(list_id: &str) -> Self {
         Self {
             id: crate::new_id(),
-            source,
+            list_id: list_id.into(),
             name: String::new(),
             description: String::new(),
             logo_path: None,
@@ -115,7 +133,7 @@ impl Group {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Event {
     pub id: String,
-    pub source: Source,
+    pub list_id: String,
     /// One-off events such as fireworks or meteor showers may have no group.
     pub group_id: Option<String>,
     pub title: String,
@@ -139,10 +157,10 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn new(source: Source, start: NaiveDateTime) -> Self {
+    pub fn new(list_id: &str, start: NaiveDateTime) -> Self {
         Self {
             id: crate::new_id(),
-            source,
+            list_id: list_id.into(),
             group_id: None,
             title: String::new(),
             description: String::new(),
