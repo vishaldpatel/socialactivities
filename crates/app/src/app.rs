@@ -1,44 +1,21 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use chrono::{NaiveTime, TimeDelta};
-use iced::widget::{button, checkbox, column, pick_list, row, rule, scrollable, space, text_input};
+use iced::widget::{button, checkbox, column, row, rule, scrollable, space, text_input};
 use iced::{Element, Fill, Task};
-use sdsa_core::catalog::{NEIGHBORHOODS, Neighborhood, TAGS};
+use sdsa_core::catalog::CATEGORIES;
 use sdsa_core::recurrence;
 use sdsa_core::{Event, Group, Occurrence, Source, Store};
 
 use crate::form::{self, Editor, Record};
-use crate::{list, ui};
+use crate::location::{self, Area};
+use crate::{list, search, ui};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Events,
     Groups,
-}
-
-/// Neighborhood filter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Area {
-    All,
-    One(Neighborhood),
-}
-
-impl Area {
-    fn options() -> Vec<Area> {
-        std::iter::once(Area::All)
-            .chain(NEIGHBORHOODS.iter().copied().map(Area::One))
-            .collect()
-    }
-}
-
-impl std::fmt::Display for Area {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Area::All => f.write_str("All neighborhoods"),
-            Area::One(n) => f.write_str(n.name),
-        }
-    }
 }
 
 /// How upcoming events are grouped under headings.
@@ -92,37 +69,48 @@ impl std::fmt::Display for Horizon {
 #[derive(Debug, Default)]
 pub struct Filters {
     pub search: String,
-    pub area: Option<Neighborhood>,
-    pub tags: HashSet<&'static str>,
+    pub area: Area,
+    pub categories: HashSet<&'static str>,
+    /// Free-form tags; a record must have all of them.
+    pub tags: BTreeSet<String>,
     pub show_hidden: bool,
 }
 
 impl Filters {
     fn matches_text(&self, fields: &[&str]) -> bool {
-        let needle = self.search.trim().to_lowercase();
-        needle.is_empty() || fields.iter().any(|f| f.to_lowercase().contains(&needle))
+        self.search.trim().is_empty() || fields.iter().any(|f| search::matches(f, &self.search))
     }
 
-    fn matches_tags<'a>(&self, tags: impl IntoIterator<Item = &'a String>) -> bool {
-        self.tags.is_empty() || tags.into_iter().any(|t| self.tags.contains(t.as_str()))
+    /// Any of the selected categories.
+    fn matches_categories<'a>(&self, categories: impl IntoIterator<Item = &'a String>) -> bool {
+        self.categories.is_empty()
+            || categories
+                .into_iter()
+                .any(|c| self.categories.contains(c.as_str()))
     }
 
-    fn matches_area(&self, slug: &str) -> bool {
-        self.area.is_none_or(|n| n.slug == slug)
+    /// All of the selected tags.
+    fn matches_tags<'a>(&self, tags: impl IntoIterator<Item = &'a String> + Clone) -> bool {
+        self.tags
+            .iter()
+            .all(|want| tags.clone().into_iter().any(|t| t == want))
     }
 
     pub fn group(&self, g: &Group, hidden: &HashSet<String>) -> bool {
         (self.show_hidden || !hidden.contains(&g.id))
-            && self.matches_area(&g.neighborhood)
+            && self.area.contains(&g.neighborhood)
+            && self.matches_categories(&g.categories)
             && self.matches_tags(&g.tags)
             && self.matches_text(&[&g.name, &g.description, &g.address])
     }
 
     pub fn event(&self, e: &Event, group: Option<&Group>, hidden: &HashSet<String>) -> bool {
+        let group_categories = group.into_iter().flat_map(|g| &g.categories);
         let group_tags = group.into_iter().flat_map(|g| &g.tags);
         let group_name = group.map_or("", |g| g.name.as_str());
         (self.show_hidden || group.is_none_or(|g| !hidden.contains(&g.id)))
-            && self.matches_area(&e.neighborhood)
+            && self.area.contains(&e.neighborhood)
+            && self.matches_categories(e.categories.iter().chain(group_categories))
             && self.matches_tags(e.tags.iter().chain(group_tags))
             && self.matches_text(&[&e.title, &e.description, &e.location, group_name])
     }
@@ -133,7 +121,10 @@ pub enum Message {
     Tab(Tab),
     Search(String),
     Area(Area),
-    Tag(&'static str, bool),
+    /// Picking a region heading in an editor, where only places are allowed.
+    Noop,
+    Category(&'static str, bool),
+    ToggleTag(String),
     ShowHidden(bool),
     ClearFilters,
     Bucket(Bucket),
@@ -158,6 +149,8 @@ pub struct App {
     pub groups: Vec<Group>,
     pub events: Vec<Event>,
     pub hidden: HashSet<String>,
+    /// Every free-form tag in use, sorted.
+    pub tags: Vec<String>,
     /// Upcoming occurrences of `events` within `horizon`, before filtering.
     pub occurrences: Vec<Occurrence>,
     pub filters: Filters,
@@ -179,6 +172,7 @@ impl App {
             groups: Vec::new(),
             events: Vec::new(),
             hidden: HashSet::new(),
+            tags: Vec::new(),
             occurrences: Vec::new(),
             filters: Filters::default(),
             bucket: Bucket::Day,
@@ -238,6 +232,12 @@ impl App {
                 self.groups = groups;
                 self.events = events;
                 self.hidden = hidden;
+                let in_use: BTreeSet<&String> = (self.groups.iter().flat_map(|g| &g.tags))
+                    .chain(self.events.iter().flat_map(|e| &e.tags))
+                    .collect();
+                self.tags = in_use.into_iter().cloned().collect();
+                // Drop selections for tags that no longer exist.
+                self.filters.tags.retain(|t| self.tags.contains(t));
             }
             Err(e) => self.status = Some((format!("Couldn't load data: {e}"), true)),
         }
@@ -257,13 +257,18 @@ impl App {
                 self.editor = None;
             }
             Message::Search(s) => self.filters.search = s,
-            Message::Area(Area::All) => self.filters.area = None,
-            Message::Area(Area::One(n)) => self.filters.area = Some(n),
-            Message::Tag(tag, on) => {
+            Message::Area(area) => self.filters.area = area,
+            Message::Noop => {}
+            Message::Category(slug, on) => {
                 if on {
-                    self.filters.tags.insert(tag);
+                    self.filters.categories.insert(slug);
                 } else {
-                    self.filters.tags.remove(tag);
+                    self.filters.categories.remove(slug);
+                }
+            }
+            Message::ToggleTag(tag) => {
+                if !self.filters.tags.remove(&tag) {
+                    self.filters.tags.insert(tag);
                 }
             }
             Message::ShowHidden(on) => self.filters.show_hidden = on,
@@ -292,7 +297,9 @@ impl App {
                 }
             }
             Message::NewEvent(group_id) => {
-                let group = self.group(group_id.as_deref());
+                let group = self
+                    .group(group_id.as_deref())
+                    .filter(|g| !self.hidden.contains(&g.id));
                 // A user's event for one of their own groups stays with their data.
                 let source = match group {
                     Some(g) if g.source == Source::User => Source::User,
@@ -415,21 +422,35 @@ impl App {
             header = header.push(ui::chip("Admin: editing curated defaults"));
         }
 
-        let tags = column(TAGS.iter().map(|t| {
-            checkbox(self.filters.tags.contains(t.slug))
-                .label(t.name)
-                .on_toggle(move |on| Message::Tag(t.slug, on))
+        let categories = column(CATEGORIES.iter().map(|c| {
+            checkbox(self.filters.categories.contains(c.slug))
+                .label(c.name)
+                .on_toggle(move |on| Message::Category(c.slug, on))
                 .size(16)
                 .text_size(14)
                 .into()
         }))
         .spacing(6);
 
-        let area = self.filters.area.map_or(Area::All, Area::One);
+        let tags: Element<'_, Message> = if self.tags.is_empty() {
+            ui::muted("No tags yet").into()
+        } else {
+            row(self.tags.iter().map(|t| {
+                ui::tag(
+                    t,
+                    self.filters.tags.contains(t),
+                    Message::ToggleTag(t.clone()),
+                )
+            }))
+            .spacing(6)
+            .wrap()
+            .vertical_spacing(6)
+            .into()
+        };
 
         let sidebar = column![
             header,
-            tab("Upcoming events", Tab::Events),
+            tab("Events", Tab::Events),
             tab("Groups", Tab::Groups),
             row![
                 button("+ Group")
@@ -441,17 +462,19 @@ impl App {
             ]
             .spacing(8),
             rule::horizontal(1),
-            ui::bold("Filters"),
+            ui::bold("Search"),
             text_input("Search…", &self.filters.search).on_input(Message::Search),
-            pick_list(Area::options(), Some(area), Message::Area).width(Fill),
+            location::area_picker(self.filters.area),
             ui::muted("Categories"),
+            categories,
+            ui::muted("Tags"),
             tags,
             checkbox(self.filters.show_hidden)
                 .label("Show hidden groups")
                 .on_toggle(Message::ShowHidden)
                 .size(16)
                 .text_size(14),
-            button("Clear filters")
+            button("Clear search")
                 .style(button::text)
                 .on_press(Message::ClearFilters),
             space::vertical(),
@@ -461,5 +484,28 @@ impl App {
         .width(240);
 
         scrollable(sidebar).height(Fill).into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tags_must_all_match_and_include_group_tags() {
+        let mut group = Group::new(Source::User);
+        group.tags = vec!["beginner friendly".into()];
+        let mut event = Event::new(Source::User, Default::default());
+        event.tags = vec!["night".into()];
+        let hidden = HashSet::new();
+
+        let mut filters = Filters::default();
+        filters.tags.insert("beginner friendly".into());
+        assert!(filters.event(&event, Some(&group), &hidden));
+        filters.tags.insert("night".into());
+        assert!(filters.event(&event, Some(&group), &hidden));
+        assert!(!filters.group(&group, &hidden));
+        filters.tags.insert("dogs".into());
+        assert!(!filters.event(&event, Some(&group), &hidden));
     }
 }

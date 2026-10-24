@@ -41,7 +41,11 @@ time in San Diego local time, so times stay put across daylight saving changes.
 The editor offers presets (weekly, every other week, monthly on the Nth weekday)
 and a custom RRULE field. Individual dates can be cancelled.
 
-Neighborhoods and categories are fixed lists in `crates/core/src/catalog.rs`.
+Neighborhoods and cities roll up into four regions (North County, San Diego
+City, East County, South County); those, and the two categories ("Shake 'n
+Bake" and "Chill"), are fixed lists in `crates/core/src/catalog.rs`. Records
+marked "Countywide / Various" match every region. Tags are free-form, stored
+lowercase, and an event inherits its group's tags and categories.
 
 ## Curating the defaults
 

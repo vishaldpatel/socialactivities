@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use chrono::{NaiveDate, NaiveDateTime};
-use rusqlite::{Connection, OpenFlags, Transaction, params};
+use rusqlite::{Connection, OpenFlags, Statement, Transaction, params};
 use rusqlite_migration::{M, Migrations};
 
 use crate::model::{Cost, CostKind, Event, Group, Link, Source};
@@ -13,7 +13,8 @@ const DATETIME_FMT: &str = "%Y-%m-%dT%H:%M:%S";
 const DATE_FMT: &str = "%Y-%m-%d";
 
 /// Schema migrations, oldest first. Never edit a released entry; append a new one.
-const SCHEMA: &[&str] = &["CREATE TABLE groups (
+const SCHEMA: &[&str] = &[
+    "CREATE TABLE groups (
             id            TEXT PRIMARY KEY,
             name          TEXT NOT NULL,
             description   TEXT NOT NULL DEFAULT '',
@@ -67,7 +68,52 @@ const SCHEMA: &[&str] = &["CREATE TABLE groups (
         -- Only meaningful in the user database; may reference groups in either.
         CREATE TABLE hidden_groups (
             group_id TEXT PRIMARY KEY
-        );"];
+        );",
+    // v2: collapse the original twelve categories into "active" and "chill".
+    // "outdoors" alone counts as active, but not alongside a chill category
+    // (stargazing is outdoors, but hardly a workout).
+    "CREATE TEMP TABLE chill_tags (tag TEXT PRIMARY KEY);
+        INSERT INTO chill_tags VALUES ('games'), ('trivia'), ('language'), ('professional'),
+            ('volunteering'), ('creative'), ('festival'), ('sky');
+
+        INSERT OR IGNORE INTO group_tags (group_id, tag)
+            SELECT group_id, 'chill' FROM group_tags WHERE tag IN (SELECT tag FROM chill_tags);
+        INSERT OR IGNORE INTO group_tags (group_id, tag)
+            SELECT group_id, 'active' FROM group_tags g
+            WHERE tag IN ('fitness', 'water', 'dance')
+               OR (tag = 'outdoors' AND NOT EXISTS (
+                   SELECT 1 FROM group_tags c
+                   WHERE c.group_id = g.group_id AND c.tag IN (SELECT tag FROM chill_tags)));
+        DELETE FROM group_tags WHERE tag NOT IN ('active', 'chill');
+
+        INSERT OR IGNORE INTO event_tags (event_id, tag)
+            SELECT event_id, 'chill' FROM event_tags WHERE tag IN (SELECT tag FROM chill_tags);
+        INSERT OR IGNORE INTO event_tags (event_id, tag)
+            SELECT event_id, 'active' FROM event_tags e
+            WHERE tag IN ('fitness', 'water', 'dance')
+               OR (tag = 'outdoors' AND NOT EXISTS (
+                   SELECT 1 FROM event_tags c
+                   WHERE c.event_id = e.event_id AND c.tag IN (SELECT tag FROM chill_tags)));
+        DELETE FROM event_tags WHERE tag NOT IN ('active', 'chill');
+
+        DROP TABLE chill_tags;",
+    // v3: the fixed categories move to their own tables, and `*_tags` now hold
+    // free-form tags.
+    "ALTER TABLE group_tags RENAME TO group_categories;
+        ALTER TABLE group_categories RENAME COLUMN tag TO category;
+        ALTER TABLE event_tags RENAME TO event_categories;
+        ALTER TABLE event_categories RENAME COLUMN tag TO category;
+        CREATE TABLE group_tags (
+            group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+            tag      TEXT NOT NULL,
+            PRIMARY KEY (group_id, tag)
+        );
+        CREATE TABLE event_tags (
+            event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            tag      TEXT NOT NULL,
+            PRIMARY KEY (event_id, tag)
+        );",
+];
 
 static MIGRATIONS: LazyLock<Migrations<'static>> =
     LazyLock::new(|| Migrations::new(SCHEMA.iter().map(|sql| M::up(sql)).collect()));
@@ -125,8 +171,45 @@ fn parse_date(column: &'static str, s: String) -> Result<NaiveDate> {
     NaiveDate::parse_from_str(&s, DATE_FMT).map_err(|_| DbError::BadValue { column, value: s })
 }
 
+/// Reads a one-column list of strings for one record with a prepared `stmt`.
+fn load_list(stmt: &mut Statement, id: &str) -> Result<Vec<String>> {
+    Ok(stmt
+        .query_map([id], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Replaces the `value_col` rows of `table` that belong to record `id`.
+fn replace_list(
+    tx: &Transaction,
+    (table, id_col, value_col): (&str, &str, &str),
+    id: &str,
+    values: &[String],
+) -> Result<()> {
+    tx.execute(&format!("DELETE FROM {table} WHERE {id_col} = ?1"), [id])?;
+    let insert = format!("INSERT OR IGNORE INTO {table} ({id_col}, {value_col}) VALUES (?1, ?2)");
+    for value in values {
+        tx.execute(&insert, [id, value])?;
+    }
+    Ok(())
+}
+
+const GROUP_CATEGORIES: (&str, &str, &str) = ("group_categories", "group_id", "category");
+const GROUP_TAGS: (&str, &str, &str) = ("group_tags", "group_id", "tag");
+const EVENT_CATEGORIES: (&str, &str, &str) = ("event_categories", "event_id", "category");
+const EVENT_TAGS: (&str, &str, &str) = ("event_tags", "event_id", "tag");
+
+fn list_query<'c>(
+    conn: &'c Connection,
+    (table, id_col, value_col): (&str, &str, &str),
+) -> Result<Statement<'c>> {
+    Ok(conn.prepare(&format!(
+        "SELECT {value_col} FROM {table} WHERE {id_col} = ?1 ORDER BY {value_col}"
+    ))?)
+}
+
 pub fn load_groups(conn: &Connection, source: Source) -> Result<Vec<Group>> {
-    let mut tags = conn.prepare("SELECT tag FROM group_tags WHERE group_id = ?1 ORDER BY tag")?;
+    let mut categories = list_query(conn, GROUP_CATEGORIES)?;
+    let mut tags = list_query(conn, GROUP_TAGS)?;
     let mut links =
         conn.prepare("SELECT kind, url FROM group_links WHERE group_id = ?1 ORDER BY position")?;
     let mut stmt = conn.prepare(
@@ -149,6 +232,7 @@ pub fn load_groups(conn: &Connection, source: Source) -> Result<Vec<Group>> {
                     kind: CostKind::parse(&r.get::<_, String>(7)?),
                     note: r.get(8)?,
                 },
+                categories: Vec::new(),
                 tags: Vec::new(),
                 links: Vec::new(),
                 last_verified: None,
@@ -163,9 +247,8 @@ pub fn load_groups(conn: &Connection, source: Source) -> Result<Vec<Group>> {
         g.last_verified = verified
             .map(|v| parse_date("last_verified", v))
             .transpose()?;
-        g.tags = tags
-            .query_map([&g.id], |r| r.get(0))?
-            .collect::<rusqlite::Result<_>>()?;
+        g.categories = load_list(&mut categories, &g.id)?;
+        g.tags = load_list(&mut tags, &g.id)?;
         g.links = links
             .query_map([&g.id], |r| {
                 Ok(Link {
@@ -204,14 +287,9 @@ pub fn save_group(conn: &mut Connection, g: &Group) -> Result<()> {
             g.last_verified.map(|d| d.format(DATE_FMT).to_string()),
         ],
     )?;
-    tx.execute("DELETE FROM group_tags WHERE group_id = ?1", [&g.id])?;
+    replace_list(&tx, GROUP_CATEGORIES, &g.id, &g.categories)?;
+    replace_list(&tx, GROUP_TAGS, &g.id, &g.tags)?;
     tx.execute("DELETE FROM group_links WHERE group_id = ?1", [&g.id])?;
-    for tag in &g.tags {
-        tx.execute(
-            "INSERT OR IGNORE INTO group_tags (group_id, tag) VALUES (?1, ?2)",
-            [&g.id, tag],
-        )?;
-    }
     for (i, link) in g.links.iter().enumerate() {
         tx.execute(
             "INSERT INTO group_links (group_id, position, kind, url) VALUES (?1, ?2, ?3, ?4)",
@@ -232,7 +310,8 @@ pub fn delete_group(conn: &mut Connection, id: &str) -> Result<()> {
 }
 
 pub fn load_events(conn: &Connection, source: Source) -> Result<Vec<Event>> {
-    let mut tags = conn.prepare("SELECT tag FROM event_tags WHERE event_id = ?1 ORDER BY tag")?;
+    let mut categories = list_query(conn, EVENT_CATEGORIES)?;
+    let mut tags = list_query(conn, EVENT_TAGS)?;
     let mut cancelled =
         conn.prepare("SELECT date FROM event_cancellations WHERE event_id = ?1 ORDER BY date")?;
     let mut stmt = conn.prepare(
@@ -259,6 +338,7 @@ pub fn load_events(conn: &Connection, source: Source) -> Result<Vec<Event>> {
                     note: r.get(10)?,
                 },
                 url: r.get(11)?,
+                categories: Vec::new(),
                 tags: Vec::new(),
                 cancelled: Vec::new(),
             },
@@ -269,9 +349,8 @@ pub fn load_events(conn: &Connection, source: Source) -> Result<Vec<Event>> {
     for row in rows {
         let (start, mut e) = row?;
         e.start = parse_datetime(start)?;
-        e.tags = tags
-            .query_map([&e.id], |r| r.get(0))?
-            .collect::<rusqlite::Result<_>>()?;
+        e.categories = load_list(&mut categories, &e.id)?;
+        e.tags = load_list(&mut tags, &e.id)?;
         e.cancelled = cancelled
             .query_map([&e.id], |r| r.get::<_, String>(0))?
             .map(|d| parse_date("date", d?))
@@ -314,13 +393,8 @@ pub fn save_event(conn: &mut Connection, e: &Event) -> Result<()> {
 }
 
 fn replace_children(tx: &Transaction, e: &Event) -> Result<()> {
-    tx.execute("DELETE FROM event_tags WHERE event_id = ?1", [&e.id])?;
-    for tag in &e.tags {
-        tx.execute(
-            "INSERT OR IGNORE INTO event_tags (event_id, tag) VALUES (?1, ?2)",
-            [&e.id, tag],
-        )?;
-    }
+    replace_list(tx, EVENT_CATEGORIES, &e.id, &e.categories)?;
+    replace_list(tx, EVENT_TAGS, &e.id, &e.tags)?;
     tx.execute(
         "DELETE FROM event_cancellations WHERE event_id = ?1",
         [&e.id],
@@ -357,4 +431,45 @@ pub fn set_hidden(conn: &Connection, group_id: &str, hidden: bool) -> Result<()>
         conn.execute("DELETE FROM hidden_groups WHERE group_id = ?1", [group_id])?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn list(conn: &Connection, table: (&str, &str, &str), id: &str) -> Vec<String> {
+        load_list(&mut list_query(conn, table).unwrap(), id).unwrap()
+    }
+
+    #[test]
+    fn v2_collapses_categories_and_v3_moves_them() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        Migrations::new(vec![M::up(SCHEMA[0])])
+            .to_latest(&mut conn)
+            .unwrap();
+        conn.execute_batch(
+            "INSERT INTO groups (id, name, neighborhood) VALUES
+                ('run', 'Run', 'x'), ('games', 'Games', 'x'), ('both', 'Both', 'x');
+             INSERT INTO group_tags VALUES
+                ('run', 'fitness'), ('run', 'outdoors'),
+                ('games', 'games'), ('games', 'trivia'),
+                ('both', 'dance'), ('both', 'language');
+             INSERT INTO events (id, title, neighborhood, start, duration_minutes) VALUES
+                ('stars', 'Stars', 'x', '2027-08-12T22:00:00', 60),
+                ('hike', 'Hike', 'x', '2027-08-12T08:00:00', 60);
+             INSERT INTO event_tags VALUES
+                ('stars', 'sky'), ('stars', 'outdoors'), ('hike', 'outdoors');",
+        )
+        .unwrap();
+
+        MIGRATIONS.to_latest(&mut conn).unwrap();
+
+        assert_eq!(list(&conn, GROUP_CATEGORIES, "run"), ["active"]);
+        assert_eq!(list(&conn, GROUP_CATEGORIES, "games"), ["chill"]);
+        assert_eq!(list(&conn, GROUP_CATEGORIES, "both"), ["active", "chill"]);
+        assert_eq!(list(&conn, EVENT_CATEGORIES, "stars"), ["chill"]);
+        assert_eq!(list(&conn, EVENT_CATEGORIES, "hike"), ["active"]);
+        assert!(list(&conn, GROUP_TAGS, "run").is_empty());
+        assert!(list(&conn, EVENT_TAGS, "stars").is_empty());
+    }
 }

@@ -1,6 +1,8 @@
 mod app;
 mod form;
 mod list;
+mod location;
+mod search;
 mod ui;
 
 use std::cell::Cell;

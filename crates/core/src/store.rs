@@ -160,7 +160,8 @@ mod tests {
         let mut store = Store::in_memory(true).unwrap();
         let mut g = Group::new(Source::Defaults);
         g.name = "Trivia".into();
-        g.tags = vec!["trivia".into(), "games".into()];
+        g.categories = vec!["active".into(), "chill".into()];
+        g.tags = vec!["beginner friendly".into(), "trivia".into()];
         g.links = vec![crate::model::Link {
             kind: "website".into(),
             url: "https://example.com".into(),
@@ -172,15 +173,13 @@ mod tests {
         e.group_id = Some(g.id.clone());
         e.rrule = Some("FREQ=WEEKLY;BYDAY=TU".into());
         e.cancelled = vec![NaiveDate::from_ymd_opt(2026, 10, 13).unwrap()];
-        e.tags = vec!["games".into()];
+        e.categories = vec!["chill".into()];
+        e.tags = vec!["outdoors".into()];
         store.save_event(&e).unwrap();
 
         let groups = store.groups().unwrap();
         assert_eq!(groups.len(), 1);
-        let mut loaded = groups[0].clone();
-        loaded.tags.sort();
-        g.tags.sort();
-        assert_eq!(loaded, g);
+        assert_eq!(groups[0], g);
         assert_eq!(store.events().unwrap(), vec![e]);
     }
 

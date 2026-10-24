@@ -84,6 +84,9 @@ pub struct Group {
     /// Human description of how often the group meets, e.g. "Weekly on Saturdays".
     pub frequency: String,
     pub cost: Cost,
+    /// Slugs from [`crate::catalog::CATEGORIES`].
+    pub categories: Vec<String>,
+    /// Free-form tags, normalized with [`crate::catalog::normalize_tag`].
     pub tags: Vec<String>,
     pub links: Vec<Link>,
     pub last_verified: Option<NaiveDate>,
@@ -97,10 +100,11 @@ impl Group {
             name: String::new(),
             description: String::new(),
             logo_path: None,
-            neighborhood: "countywide".into(),
+            neighborhood: String::new(),
             address: String::new(),
             frequency: String::new(),
             cost: Cost::default(),
+            categories: Vec::new(),
             tags: Vec::new(),
             links: Vec::new(),
             last_verified: None,
@@ -127,6 +131,8 @@ pub struct Event {
     pub cost: Cost,
     pub url: String,
     /// Categories of this event, in addition to its group's.
+    pub categories: Vec<String>,
+    /// Free-form tags of this event, in addition to its group's.
     pub tags: Vec<String>,
     /// Dates of individual occurrences that won't happen.
     pub cancelled: Vec<NaiveDate>,
@@ -140,13 +146,14 @@ impl Event {
             group_id: None,
             title: String::new(),
             description: String::new(),
-            neighborhood: "countywide".into(),
+            neighborhood: String::new(),
             location: String::new(),
             start,
             duration_minutes: 120,
             rrule: None,
             cost: Cost::default(),
             url: String::new(),
+            categories: Vec::new(),
             tags: Vec::new(),
             cancelled: Vec::new(),
         }

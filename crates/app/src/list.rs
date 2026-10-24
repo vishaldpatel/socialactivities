@@ -1,13 +1,15 @@
 //! The browsing views: upcoming events and groups.
 
+use std::collections::BTreeSet;
+
 use chrono::{Datelike, NaiveDate, TimeDelta};
-use iced::widget::{Column, button, column, image, pick_list, row, scrollable, space, text};
+use iced::widget::{Column, Row, button, column, image, pick_list, row, scrollable, space, text};
 use iced::{Center, Element, Fill};
-use sdsa_core::catalog::{neighborhood_name, tag_name};
+use sdsa_core::catalog::{category_name, neighborhood_name};
 use sdsa_core::{Event, Group, Occurrence};
 
 use crate::app::{App, Bucket, Horizon, Message};
-use crate::ui;
+use crate::{search, ui};
 
 fn bucket_start(bucket: Bucket, date: NaiveDate) -> NaiveDate {
     match bucket {
@@ -61,7 +63,7 @@ fn link_buttons(group: &Group) -> impl Iterator<Item = Element<'_, Message>> {
 
 pub fn events(app: &App) -> Element<'_, Message> {
     let header = row![
-        ui::heading("Upcoming events"),
+        ui::heading("Events"),
         space::horizontal(),
         pick_list(Bucket::ALL, Some(app.bucket), Message::Bucket),
         pick_list(Horizon::ALL, Some(app.horizon), Message::Horizon),
@@ -91,7 +93,7 @@ pub fn events(app: &App) -> Element<'_, Message> {
         list = list.push(occurrence(app, occ, event, group));
     }
     if !any {
-        list = list.push(ui::muted("No upcoming events match your filters."));
+        list = list.push(ui::muted("No events match your search."));
     }
 
     column![header, scrollable(list.padding([0, 12])).height(Fill)]
@@ -105,13 +107,37 @@ fn occurrence<'a>(
     event: &'a Event,
     group: Option<&'a Group>,
 ) -> Element<'a, Message> {
+    let needle = app.filters.search.as_str();
     let area = neighborhood_name(&event.neighborhood);
-    let mut details = vec![area.to_string(), event.cost.to_string()];
+    let cost = event.cost.to_string();
+    let mut details = vec![area, cost.as_str()];
     if let Some(g) = group {
-        details.insert(0, g.name.clone());
+        details.insert(0, &g.name);
     }
     if !event.location.is_empty() && event.location != area {
-        details.push(event.location.clone());
+        details.push(&event.location);
+    }
+
+    let group_tags = group.into_iter().flat_map(|g| &g.tags);
+    let title = labels(
+        app,
+        ui::rich_bold(ui::highlight(&event.title, needle)).into(),
+        // Categories are left off event rows for now.
+        [],
+        event.tags.iter().chain(group_tags),
+    )
+    .wrap()
+    .vertical_spacing(4);
+
+    let mut info = column![
+        title,
+        ui::rich_muted(ui::highlight_joined(&details, needle))
+    ]
+    .spacing(4)
+    .width(Fill);
+    // The description isn't listed, so show the part of it that matched.
+    if let Some(snippet) = search::snippet(&event.description, needle, 40) {
+        info = info.push(ui::rich_muted(ui::highlight(&snippet, needle)));
     }
 
     let mut actions = row![].spacing(6);
@@ -133,18 +159,9 @@ fn occurrence<'a>(
     }
 
     ui::card(
-        row![
-            ui::bold(when(app.bucket, occ)).width(130),
-            column![
-                ui::bold(event.title.as_str()),
-                ui::muted(details.join(" · ")),
-            ]
-            .spacing(2)
-            .width(Fill),
-            actions,
-        ]
-        .spacing(12)
-        .align_y(Center),
+        row![ui::bold(when(app.bucket, occ)).width(130), info, actions,]
+            .spacing(12)
+            .align_y(Center),
     )
 }
 
@@ -163,7 +180,7 @@ pub fn groups(app: &App) -> Element<'_, Message> {
     .align_y(Center);
 
     let list: Element<'_, Message> = if visible.is_empty() {
-        ui::muted("No groups match your filters.").into()
+        ui::muted("No groups match your search.").into()
     } else {
         Column::with_children(visible.into_iter().map(|g| group_card(app, g)))
             .spacing(10)
@@ -176,24 +193,55 @@ pub fn groups(app: &App) -> Element<'_, Message> {
         .into()
 }
 
+/// A title followed by category chips and clickable tag chips.
+fn labels<'a>(
+    app: &'a App,
+    title: Element<'a, Message>,
+    categories: impl IntoIterator<Item = &'a String>,
+    tags: impl IntoIterator<Item = &'a String>,
+) -> Row<'a, Message> {
+    // A group and its event may share labels.
+    let categories: BTreeSet<&String> = categories.into_iter().collect();
+    let tags: BTreeSet<&String> = tags.into_iter().collect();
+    row![title]
+        .extend(categories.into_iter().map(|c| ui::chip(category_name(c))))
+        .extend(tags.into_iter().map(|t| {
+            ui::tag(
+                t,
+                app.filters.tags.contains(t),
+                Message::ToggleTag(t.clone()),
+            )
+        }))
+        .spacing(6)
+        .align_y(Center)
+}
+
 fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
     let hidden = app.hidden.contains(&g.id);
 
-    let mut title = row![ui::bold(g.name.as_str()).size(17)]
-        .spacing(6)
-        .align_y(Center);
-    for tag in &g.tags {
-        title = title.push(ui::chip(tag_name(tag)));
-    }
+    let needle = app.filters.search.as_str();
+    let mut title = labels(
+        app,
+        ui::rich_bold(ui::highlight(&g.name, needle))
+            .size(17)
+            .into(),
+        &g.categories,
+        &g.tags,
+    );
     if hidden {
         title = title.push(text("Hidden").size(12));
     }
 
-    let mut facts = vec![neighborhood_name(&g.neighborhood).to_string()];
-    if !g.frequency.is_empty() {
-        facts.push(g.frequency.clone());
+    let area = neighborhood_name(&g.neighborhood);
+    let cost = g.cost.to_string();
+    let mut facts = vec![area];
+    if !g.address.is_empty() && g.address != area {
+        facts.push(&g.address);
     }
-    facts.push(g.cost.to_string());
+    if !g.frequency.is_empty() {
+        facts.push(&g.frequency);
+    }
+    facts.push(&cost);
 
     let next = app
         .occurrences
@@ -201,9 +249,10 @@ fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
         .find(|o| app.events[o.event].group_id.as_deref() == Some(g.id.as_str()))
         .map(|o| format!("Next: {}", o.start.format("%a %b %-d, %-I:%M %p")));
 
-    let mut body = column![title, ui::muted(facts.join(" · "))].spacing(6);
+    let title = title.wrap().vertical_spacing(4);
+    let mut body = column![title, ui::rich_muted(ui::highlight_joined(&facts, needle))].spacing(6);
     if !g.description.is_empty() {
-        body = body.push(text(g.description.as_str()).size(14));
+        body = body.push(ui::rich(ui::highlight(&g.description, needle)).size(14));
     }
     if let Some(next) = next {
         body = body.push(text(next).size(14));
@@ -222,11 +271,13 @@ fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
             .style(button::text)
             .on_press(Message::SetHidden(g.id.clone(), !hidden)),
     );
-    actions = actions.push(
-        button(text("+ Event").size(13))
-            .style(button::text)
-            .on_press(Message::NewEvent(Some(g.id.clone()))),
-    );
+    if !hidden {
+        actions = actions.push(
+            button(text("+ Event").size(13))
+                .style(button::text)
+                .on_press(Message::NewEvent(Some(g.id.clone()))),
+        );
+    }
     if app.can_edit(g.source) {
         actions = actions.push(
             button(text("Edit").size(13))

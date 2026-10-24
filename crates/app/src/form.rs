@@ -1,6 +1,6 @@
 //! Add/edit forms for groups and events.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use iced::widget::{
@@ -8,12 +8,12 @@ use iced::widget::{
     text_input,
 };
 use iced::{Center, Element, Fill};
-use sdsa_core::catalog::{LINK_KINDS, NEIGHBORHOODS, Neighborhood, TAGS};
+use sdsa_core::catalog::{CATEGORIES, LINK_KINDS, Neighborhood, find_neighborhood, normalize_tag};
 use sdsa_core::recurrence::{self, Repeat};
 use sdsa_core::{Cost, CostKind, Event, Group, Link, Source};
 
 use crate::app::{App, Message};
-use crate::ui;
+use crate::{location, ui};
 
 /// A single edit to whichever form is open.
 #[derive(Debug, Clone)]
@@ -24,7 +24,10 @@ pub enum Field {
     Place(String),
     CostKind(CostKind),
     CostNote(String),
-    Tag(&'static str, bool),
+    Category(&'static str, bool),
+    Tags(String),
+    /// Appends an existing tag to the tags field.
+    AddTag(String),
     // Groups
     Logo(String),
     Frequency(String),
@@ -89,11 +92,15 @@ struct Common {
     is_new: bool,
     source: Source,
     description: text_editor::Content,
-    neighborhood: Neighborhood,
+    /// `None` until one is chosen. Existing countywide records keep that value,
+    /// though it can no longer be picked.
+    neighborhood: Option<Neighborhood>,
     place: String,
     cost_kind: CostKind,
     cost_note: String,
-    tags: BTreeSet<String>,
+    categories: BTreeSet<String>,
+    /// Free-form tags as typed, comma separated.
+    tags: String,
     error: Option<String>,
     confirm_delete: bool,
 }
@@ -106,7 +113,7 @@ impl Common {
         neighborhood: &str,
         place: &str,
         cost: &Cost,
-        tags: &[String],
+        (categories, tags): (&[String], &[String]),
     ) -> Self {
         Self {
             is_new,
@@ -116,7 +123,8 @@ impl Common {
             place: place.into(),
             cost_kind: cost.kind,
             cost_note: cost.note.clone(),
-            tags: tags.iter().cloned().collect(),
+            categories: categories.iter().cloned().collect(),
+            tags: tags.join(", "),
             error: None,
             confirm_delete: false,
         }
@@ -126,15 +134,26 @@ impl Common {
     fn update(&mut self, field: &Field) -> bool {
         match field {
             Field::Description(action) => self.description.perform(action.clone()),
-            Field::Neighborhood(n) => self.neighborhood = *n,
+            Field::Neighborhood(n) => self.neighborhood = Some(*n),
             Field::Place(s) => self.place = s.clone(),
             Field::CostKind(k) => self.cost_kind = *k,
             Field::CostNote(s) => self.cost_note = s.clone(),
-            Field::Tag(tag, true) => {
-                self.tags.insert(tag.to_string());
+            Field::Category(slug, true) => {
+                self.categories.insert(slug.to_string());
             }
-            Field::Tag(tag, false) => {
-                self.tags.remove(*tag);
+            Field::Category(slug, false) => {
+                self.categories.remove(*slug);
+            }
+            Field::Tags(s) => self.tags = s.clone(),
+            Field::AddTag(tag) => {
+                if !self.tags().contains(tag) {
+                    let current = self.tags.trim().trim_end_matches(',');
+                    self.tags = if current.is_empty() {
+                        tag.clone()
+                    } else {
+                        format!("{current}, {tag}")
+                    };
+                }
             }
             _ => return false,
         }
@@ -149,21 +168,25 @@ impl Common {
         }
     }
 
+    fn neighborhood_slug(&self) -> Result<String, String> {
+        self.neighborhood
+            .map(|n| n.slug.to_string())
+            .ok_or_else(|| "Choose a neighborhood.".to_string())
+    }
+
     fn description(&self) -> String {
         self.description.text().trim().into()
     }
 
-    fn tags(&self) -> Vec<String> {
-        self.tags.iter().cloned().collect()
+    fn categories(&self) -> Vec<String> {
+        self.categories.iter().cloned().collect()
     }
-}
 
-fn find_neighborhood(slug: &str) -> Neighborhood {
-    NEIGHBORHOODS
-        .iter()
-        .copied()
-        .find(|n| n.slug == slug)
-        .unwrap_or(NEIGHBORHOODS[0])
+    /// The typed tags, normalized, deduplicated and sorted.
+    fn tags(&self) -> Vec<String> {
+        let tags: BTreeSet<String> = self.tags.split(',').filter_map(normalize_tag).collect();
+        tags.into_iter().collect()
+    }
 }
 
 pub struct GroupForm {
@@ -198,7 +221,7 @@ impl GroupForm {
                 &g.neighborhood,
                 &g.address,
                 &g.cost,
-                &g.tags,
+                (&g.categories, &g.tags),
             ),
             name: g.name.clone(),
             logo: g.logo_path.clone().unwrap_or_default(),
@@ -254,10 +277,11 @@ impl GroupForm {
             name: name.into(),
             description: self.common.description(),
             logo_path: (!logo.is_empty()).then(|| logo.into()),
-            neighborhood: self.common.neighborhood.slug.into(),
+            neighborhood: self.common.neighborhood_slug()?,
             address: self.common.place.trim().into(),
             frequency: self.frequency.trim().into(),
             cost: self.common.cost(),
+            categories: self.common.categories(),
             tags: self.common.tags(),
             links: self
                 .links
@@ -273,7 +297,7 @@ impl GroupForm {
         })
     }
 
-    fn view(&self) -> Column<'_, Message> {
+    fn view<'a>(&'a self, all_tags: &'a [String]) -> Column<'a, Message> {
         let links = Column::with_children(self.links.iter().enumerate().map(|(i, (kind, url))| {
             row![
                 pick_list(LINK_KINDS, Some(*kind), move |k| Message::Form(
@@ -320,7 +344,8 @@ impl GroupForm {
                     .on_input(|s| Message::Form(Field::Frequency(s)))
             ),
             cost(&self.common),
-            tags(&self.common),
+            categories(&self.common),
+            tags(&self.common, all_tags),
             labeled("Links", links),
             labeled(
                 "Logo image path (relative to the database folder, or absolute)",
@@ -368,7 +393,7 @@ impl EventForm {
                 &e.neighborhood,
                 &e.location,
                 &e.cost,
-                &e.tags,
+                (&e.categories, &e.tags),
             ),
             title: e.title.clone(),
             // The real name is filled in by `view`, which has the group list.
@@ -487,13 +512,14 @@ impl EventForm {
             group_id: self.group.id.clone(),
             title: title.into(),
             description: self.common.description(),
-            neighborhood: self.common.neighborhood.slug.into(),
+            neighborhood: self.common.neighborhood_slug()?,
             location: self.common.place.trim().into(),
             start,
             duration_minutes: (hours * 60.0).round() as u32,
             rrule: self.rrule(start)?,
             cost: self.common.cost(),
             url: self.url.trim().into(),
+            categories: self.common.categories(),
             tags: self.common.tags(),
             cancelled,
             ..self.original.clone()
@@ -513,10 +539,26 @@ impl EventForm {
         }
     }
 
-    fn view<'a>(&'a self, groups: &'a [Group]) -> Column<'a, Message> {
-        let choices: Vec<GroupChoice> = std::iter::once(GroupChoice::none())
-            .chain(groups.iter().map(GroupChoice::of))
-            .collect();
+    /// The group picker's options. Hidden groups can't be chosen, but an event
+    /// already in one keeps showing it.
+    fn group_choices(&self, groups: &[Group], hidden: &HashSet<String>) -> Vec<GroupChoice> {
+        std::iter::once(GroupChoice::none())
+            .chain(
+                groups
+                    .iter()
+                    .filter(|g| !hidden.contains(&g.id) || self.group.id.as_ref() == Some(&g.id))
+                    .map(GroupChoice::of),
+            )
+            .collect()
+    }
+
+    fn view<'a>(
+        &'a self,
+        groups: &'a [Group],
+        hidden: &HashSet<String>,
+        all_tags: &'a [String],
+    ) -> Column<'a, Message> {
+        let choices = self.group_choices(groups, hidden);
         let selected = choices
             .iter()
             .find(|c| c.id == self.group.id)
@@ -589,7 +631,8 @@ impl EventForm {
             ]
             .spacing(12),
             cost(&self.common),
-            tags(&self.common),
+            categories(&self.common),
+            tags(&self.common, all_tags),
             labeled(
                 "Link",
                 text_input("https://…", &self.url).on_input(|s| Message::Form(Field::Url(s)))
@@ -662,8 +705,8 @@ impl Editor {
         };
 
         let fields = match self {
-            Editor::Group(f) => f.view(),
-            Editor::Event(f) => f.view(&app.groups),
+            Editor::Group(f) => f.view(&app.tags),
+            Editor::Event(f) => f.view(&app.groups, &app.hidden, &app.tags),
         };
 
         let mut actions = row![
@@ -723,11 +766,9 @@ fn description(common: &Common) -> Column<'_, Message> {
 }
 
 fn neighborhood_picker(common: &Common) -> Element<'_, Message> {
-    pick_list(NEIGHBORHOODS, Some(common.neighborhood), |n| {
+    location::place_picker(common.neighborhood, |n| {
         Message::Form(Field::Neighborhood(n))
     })
-    .width(Fill)
-    .into()
 }
 
 fn cost(common: &Common) -> Element<'_, Message> {
@@ -749,11 +790,11 @@ fn cost(common: &Common) -> Element<'_, Message> {
     .into()
 }
 
-fn tags(common: &Common) -> Column<'_, Message> {
-    let boxes = row(TAGS.iter().map(|t| {
-        checkbox(common.tags.contains(t.slug))
-            .label(t.name)
-            .on_toggle(move |on| Message::Form(Field::Tag(t.slug, on)))
+fn categories(common: &Common) -> Column<'_, Message> {
+    let boxes = row(CATEGORIES.iter().map(|c| {
+        checkbox(common.categories.contains(c.slug))
+            .label(c.name)
+            .on_toggle(move |on| Message::Form(Field::Category(c.slug, on)))
             .size(16)
             .text_size(14)
             .into()
@@ -761,6 +802,24 @@ fn tags(common: &Common) -> Column<'_, Message> {
     .spacing(14)
     .wrap();
     labeled("Categories", boxes)
+}
+
+/// The tags field, plus existing tags not yet used here as one-click suggestions.
+fn tags<'a>(common: &'a Common, all_tags: &'a [String]) -> Column<'a, Message> {
+    let current = common.tags();
+    let suggestions = all_tags
+        .iter()
+        .filter(|t| !current.contains(t))
+        .map(|t| ui::tag(t, false, Message::Form(Field::AddTag(t.clone()))));
+    let mut field = column![
+        text_input("e.g. beginner friendly, dog friendly", &common.tags)
+            .on_input(|s| Message::Form(Field::Tags(s)))
+    ]
+    .spacing(6);
+    if all_tags.iter().any(|t| !current.contains(t)) {
+        field = field.push(row(suggestions).spacing(6).wrap().vertical_spacing(6));
+    }
+    labeled("Tags (comma separated; click one below to add it)", field)
 }
 
 fn parse_date(s: &str) -> Option<NaiveDate> {
@@ -817,11 +876,56 @@ mod tests {
             .unwrap();
         let mut e = Event::new(Source::User, start);
         e.title = "Game night".into();
+        e.neighborhood = "north-park".into();
         e.rrule = Repeat::Weekly.to_rrule(start);
         e.cancelled = vec![NaiveDate::from_ymd_opt(2026, 10, 13).unwrap()];
-        e.tags = vec!["games".into()];
+        e.categories = vec!["chill".into()];
+        e.tags = vec!["beginner friendly".into(), "indoors".into()];
         let built = EventForm::new(e.clone(), false).build().unwrap();
         assert_eq!(built, e);
+    }
+
+    #[test]
+    fn hidden_groups_are_not_offered_for_new_events() {
+        let start = NaiveDate::from_ymd_opt(2026, 10, 6)
+            .unwrap()
+            .and_hms_opt(19, 0, 0)
+            .unwrap();
+        let mut shown = Group::new(Source::User);
+        shown.name = "Shown".into();
+        let mut hidden_group = Group::new(Source::User);
+        hidden_group.name = "Hidden".into();
+        let groups = [shown, hidden_group.clone()];
+        let hidden = HashSet::from([hidden_group.id.clone()]);
+        let names = |f: &EventForm| -> Vec<String> {
+            f.group_choices(&groups, &hidden)
+                .into_iter()
+                .map(|c| c.name)
+                .collect()
+        };
+
+        let new = EventForm::new(Event::new(Source::User, start), true);
+        assert_eq!(names(&new)[1..], ["Shown"]);
+
+        // An existing event in a hidden group still shows its group.
+        let mut existing = Event::new(Source::User, start);
+        existing.group_id = Some(hidden_group.id.clone());
+        assert_eq!(
+            names(&EventForm::new(existing, false))[1..],
+            ["Shown", "Hidden"]
+        );
+    }
+
+    #[test]
+    fn existing_countywide_records_keep_it() {
+        let start = NaiveDate::from_ymd_opt(2027, 8, 12)
+            .unwrap()
+            .and_hms_opt(22, 0, 0)
+            .unwrap();
+        let mut e = Event::new(Source::Defaults, start);
+        e.title = "Perseids".into();
+        e.neighborhood = "countywide".into();
+        assert_eq!(EventForm::new(e.clone(), false).build().unwrap(), e);
     }
 
     #[test]
@@ -837,6 +941,9 @@ mod tests {
         f.update(Field::Rule("FREQ=NOPE".into()), &[]);
         assert!(f.build().is_err(), "invalid rule");
         f.update(Field::Rule("FREQ=DAILY".into()), &[]);
+        assert!(f.build().is_err(), "neighborhood required");
+        let hillcrest = find_neighborhood("hillcrest").unwrap();
+        f.update(Field::Neighborhood(hillcrest), &[]);
         assert!(f.build().is_ok());
     }
 }
