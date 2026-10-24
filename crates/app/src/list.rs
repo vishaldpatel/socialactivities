@@ -63,7 +63,7 @@ fn link_buttons(group: &Group) -> impl Iterator<Item = Element<'_, Message>> {
 
 pub fn events(app: &App) -> Element<'_, Message> {
     let header = row![
-        ui::heading("Events"),
+        button("Add event").on_press(Message::NewEvent(None)),
         space::horizontal(),
         pick_list(Bucket::ALL, Some(app.bucket), Message::Bucket),
         pick_list(Horizon::ALL, Some(app.horizon), Message::Horizon),
@@ -172,12 +172,7 @@ pub fn groups(app: &App) -> Element<'_, Message> {
         .filter(|g| app.filters.group(g, &app.hidden))
         .collect();
 
-    let header = row![
-        ui::heading(format!("Groups ({})", visible.len())),
-        space::horizontal(),
-        button("+ New group").on_press(Message::NewGroup),
-    ]
-    .align_y(Center);
+    let header = row![button("Add group").on_press(Message::NewGroup)].align_y(Center);
 
     let list: Element<'_, Message> = if visible.is_empty() {
         ui::muted("No groups match your search.").into()

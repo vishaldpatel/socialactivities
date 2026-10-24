@@ -452,15 +452,6 @@ impl App {
             header,
             tab("Events", Tab::Events),
             tab("Groups", Tab::Groups),
-            row![
-                button("+ Group")
-                    .on_press(Message::NewGroup)
-                    .style(button::subtle),
-                button("+ Event")
-                    .on_press(Message::NewEvent(None))
-                    .style(button::subtle),
-            ]
-            .spacing(8),
             rule::horizontal(1),
             ui::bold("Search"),
             text_input("Search…", &self.filters.search).on_input(Message::Search),
