@@ -9,7 +9,7 @@ use sdsa_core::catalog::{category_name, neighborhood_name};
 use sdsa_core::{Event, Group, Occurrence};
 
 use crate::app::{App, Bucket, Horizon, Message};
-use crate::{focusable, search, ui};
+use crate::{focusable, location, search, ui};
 
 fn bucket_start(bucket: Bucket, date: NaiveDate) -> NaiveDate {
     match bucket {
@@ -121,14 +121,16 @@ fn occurrence<'a>(
     group: Option<&'a Group>,
 ) -> Element<'a, Message> {
     let needle = app.filters.search.as_str();
+    // The neighborhood, in its region's color.
     let area = neighborhood_name(&event.neighborhood);
+    let place = location::color_of(&event.neighborhood);
     let cost = event.cost.to_string();
-    let mut details = vec![area, cost.as_str()];
+    let mut details = vec![(area, place), (cost.as_str(), None)];
     if let Some(g) = group {
-        details.insert(0, &g.name);
+        details.insert(0, (&g.name, None));
     }
     if !event.location.is_empty() && event.location != area {
-        details.push(&event.location);
+        details.push((&event.location, None));
     }
 
     let group_tags = group.into_iter().flat_map(|g| &g.tags);
@@ -172,6 +174,8 @@ fn occurrence<'a>(
     ui::card_with_side(
         ui::bold(when(app.bucket, occ)).align_x(Center),
         WHEN_WIDTH,
+        // Multi-day events are colored by their start time too.
+        crate::sky::color(occ.start.time()),
         row![info, actions].spacing(12).align_y(Center),
     )
 }
@@ -263,16 +267,18 @@ fn group_card<'a>(app: &'a App, g: &'a Group) -> Element<'a, Message> {
         title = title.push(text("Hidden").size(12));
     }
 
+    // The neighborhood, in its region's color.
     let area = neighborhood_name(&g.neighborhood);
+    let place = location::color_of(&g.neighborhood);
     let cost = g.cost.to_string();
-    let mut facts = vec![area];
+    let mut facts = vec![(area, place)];
     if !g.address.is_empty() && g.address != area {
-        facts.push(&g.address);
+        facts.push((&g.address, None));
     }
     if !g.frequency.is_empty() {
-        facts.push(&g.frequency);
+        facts.push((&g.frequency, None));
     }
-    facts.push(&cost);
+    facts.push((&cost, None));
 
     let next = app
         .occurrences

@@ -145,6 +145,10 @@ pub enum Message {
     Tab(Tab),
     Search(String),
     Area(Area),
+    /// Opens a location dropdown, or closes the open one.
+    Dropdown(Option<location::Dropdown>),
+    /// An entry was clicked in an open dropdown: do it, then close the list.
+    Picked(Box<Message>),
     /// Picking a region heading in an editor, where only places are allowed.
     Noop,
     Category(&'static str, bool),
@@ -188,6 +192,8 @@ pub struct App {
     pub horizon: Horizon,
     /// The Groups panel is listing hidden groups instead of visible ones.
     pub viewing_hidden: bool,
+    /// The location dropdown that's open, if any.
+    open_dropdown: Option<location::Dropdown>,
     tab: Tab,
     editor: Option<Editor>,
     /// Message and whether it is an error.
@@ -209,6 +215,7 @@ impl App {
             bucket: Bucket::Day,
             horizon: Horizon::Month,
             viewing_hidden: false,
+            open_dropdown: None,
             tab: Tab::Events,
             editor: None,
             status,
@@ -219,6 +226,11 @@ impl App {
 
     pub fn title(&self) -> String {
         "Social Activities!".into()
+    }
+
+    /// Whether the form's neighborhood dropdown is open.
+    pub fn place_open(&self) -> bool {
+        self.open_dropdown == Some(location::Dropdown::Place)
     }
 
     /// Whether records in `list_id` can be edited: only lists you own.
@@ -316,7 +328,12 @@ impl App {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         let was_editing = self.editor.is_some();
+        let tab = self.tab;
         let task = self.handle(message);
+        // A dropdown doesn't stay open across a change of panel or form.
+        if self.tab != tab || self.editor.is_some() != was_editing {
+            self.open_dropdown = None;
+        }
         // A newly opened form starts with its first field focused, so typing
         // and Tab work straight away.
         if !was_editing && self.editor.is_some() {
@@ -335,6 +352,11 @@ impl App {
             Message::ViewHidden(on) => self.viewing_hidden = on,
             Message::Search(s) => self.filters.search = s,
             Message::Area(area) => self.filters.area = area,
+            Message::Dropdown(which) => self.open_dropdown = which,
+            Message::Picked(message) => {
+                self.open_dropdown = None;
+                return self.handle(*message);
+            }
             Message::Noop => {}
             Message::Category(slug, on) => {
                 if on {
@@ -877,7 +899,10 @@ impl App {
             text_input("Search…", &self.filters.search)
                 .id(SEARCH_INPUT)
                 .on_input(Message::Search),
-            location::area_picker(self.filters.area),
+            location::area_picker(
+                self.filters.area,
+                self.open_dropdown == Some(location::Dropdown::Area)
+            ),
             space::vertical().height(SECTION_GAP),
             ui::muted("Categories"),
             categories,

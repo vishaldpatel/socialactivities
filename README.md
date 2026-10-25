@@ -28,10 +28,18 @@ cargo test --workspace
 | Enter or Space on a highlighted button or checkbox | Press or toggle it |
 | Pick… (or ↓ in the date field) | Open the calendar: arrows move by day/week, Page Up/Down by month, Enter picks, Esc closes |
 
+The location dropdowns (search panel and forms) also take Tab: Up/Down step
+through places, Enter or Space opens the list, Esc closes it. Each region has a
+color (North County seafoam, San Diego City blue, East County amber, South
+County pink), used in those lists and for the neighborhood name on cards; they're
+in `crates/app/src/location.rs`.
+
 Dates are entered as MM-DD-YYYY (slashes and YYYY-MM-DD also work); list
-files store them as YYYY-MM-DD. Other dropdowns (in the
-search panel and forms) can't take keyboard focus yet, so Tab skips them.
-Weeks start on Monday.
+files store them as YYYY-MM-DD. The forms' other dropdowns can't take keyboard
+focus yet, so Tab skips them.
+Weeks start on Monday. Each event's time sits on a sky color for its start
+time (night navy, dawn purple, daytime blue, afternoon gold, sunset orange);
+the colors are in `crates/app/src/sky.rs`.
 
 ## Layout
 

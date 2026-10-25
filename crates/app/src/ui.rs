@@ -51,29 +51,39 @@ const HIGHLIGHT: Color = Color {
 
 /// `s` as spans, with every search match highlighted.
 pub fn highlight<'a>(s: &str, needle: &str) -> Vec<Span<'a, (), Font>> {
+    highlight_colored(s, needle, None)
+}
+
+/// Like [`highlight`], with the text in `color` if given.
+fn highlight_colored<'a>(s: &str, needle: &str, color: Option<Color>) -> Vec<Span<'a, (), Font>> {
+    let piece = |t: &str| span(t.to_string()).color_maybe(color);
     let mut spans = Vec::new();
     let mut last = 0;
     for m in search::find(s, needle) {
         if m.start > last {
-            spans.push(span(s[last..m.start].to_string()));
+            spans.push(piece(&s[last..m.start]));
         }
-        spans.push(span(s[m.clone()].to_string()).background(HIGHLIGHT));
+        spans.push(piece(&s[m.clone()]).background(HIGHLIGHT));
         last = m.end;
     }
     if last < s.len() || spans.is_empty() {
-        spans.push(span(s[last..].to_string()));
+        spans.push(piece(&s[last..]));
     }
     spans
 }
 
-/// Several fields on one line, separated by " · ", each highlighted.
-pub fn highlight_joined<'a>(parts: &[&str], needle: &str) -> Vec<Span<'a, (), Font>> {
+/// Several fields on one line, separated by " · ", each highlighted and in
+/// its own color if it has one.
+pub fn highlight_joined<'a>(
+    parts: &[(&str, Option<Color>)],
+    needle: &str,
+) -> Vec<Span<'a, (), Font>> {
     let mut spans = Vec::new();
-    for (i, part) in parts.iter().enumerate() {
+    for (i, (part, color)) in parts.iter().enumerate() {
         if i > 0 {
             spans.push(span(" · "));
         }
-        spans.extend(highlight(part, needle));
+        spans.extend(highlight_colored(part, needle, *color));
     }
     spans
 }
@@ -143,18 +153,21 @@ pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {
         .into()
 }
 
-/// A card with a lighter, full-height panel down its left edge (an event's
-/// time), its content centered so the space either side is equal.
+/// A card with a colored, full-height panel down its left edge (an event's
+/// time, on its time-of-day sky color), its content centered so the space
+/// either side is equal. The panel's text is white.
 pub fn card_with_side<'a, M: 'a>(
     side: impl Into<Element<'a, M>>,
     side_width: f32,
+    side_color: Color,
     body: impl Into<Element<'a, M>>,
 ) -> Element<'a, M> {
     let side = container(side)
         .center_x(side_width)
         .center_y(iced::Fill)
-        .style(|theme: &Theme| container::Style {
-            background: Some(theme.extended_palette().background.weak.color.into()),
+        .style(move |_: &Theme| container::Style {
+            background: Some(side_color.into()),
+            text_color: Some(Color::WHITE),
             // Just inside the card's 5px corners and 1px border.
             border: iced::border::rounded(iced::border::left(4)),
             ..container::Style::default()

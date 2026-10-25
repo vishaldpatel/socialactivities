@@ -325,7 +325,7 @@ impl GroupForm {
         })
     }
 
-    fn view<'a>(&'a self, all_tags: &'a [String]) -> Column<'a, Message> {
+    fn view<'a>(&'a self, all_tags: &'a [String], place_open: bool) -> Column<'a, Message> {
         let links = Column::with_children(self.links.iter().enumerate().map(|(i, (kind, url))| {
             row![
                 pick_list(LINK_KINDS, Some(*kind), move |k| Message::Form(
@@ -359,7 +359,10 @@ impl GroupForm {
             ),
             description(&self.common),
             row![
-                labeled("Neighborhood", neighborhood_picker(&self.common)),
+                labeled(
+                    "Neighborhood",
+                    neighborhood_picker(&self.common, place_open)
+                ),
                 labeled(
                     "Home base / address",
                     text_input("Where they usually meet", &self.common.place)
@@ -598,6 +601,7 @@ impl EventForm {
         groups: &'a [Group],
         hidden: &HashSet<String>,
         all_tags: &'a [String],
+        place_open: bool,
     ) -> Column<'a, Message> {
         let choices = self.group_choices(groups, hidden);
         let selected = choices
@@ -678,7 +682,10 @@ impl EventForm {
             description(&self.common),
             schedule,
             row![
-                labeled("Neighborhood", neighborhood_picker(&self.common)),
+                labeled(
+                    "Neighborhood",
+                    neighborhood_picker(&self.common, place_open)
+                ),
                 labeled(
                     "Location",
                     text_input("Venue or meeting spot", &self.common.place)
@@ -769,8 +776,8 @@ impl Editor {
         };
 
         let fields = match self {
-            Editor::Group(f) => f.view(&app.tags),
-            Editor::Event(f) => f.view(&app.groups, &app.hidden, &app.tags),
+            Editor::Group(f) => f.view(&app.tags, app.place_open()),
+            Editor::Event(f) => f.view(&app.groups, &app.hidden, &app.tags, app.place_open()),
         };
         let lists: Vec<ListChoice> = app.owned_lists().map(ListChoice::of).collect();
         let selected = lists.iter().find(|l| l.id == common.list_id).cloned();
@@ -826,8 +833,8 @@ fn description(common: &Common) -> Column<'_, Message> {
     )
 }
 
-fn neighborhood_picker(common: &Common) -> Element<'_, Message> {
-    location::place_picker(common.neighborhood, |n| {
+fn neighborhood_picker(common: &Common, open: bool) -> Element<'_, Message> {
+    location::place_picker(common.neighborhood, open, |n| {
         Message::Form(Field::Neighborhood(n))
     })
 }

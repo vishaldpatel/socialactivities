@@ -13,3 +13,4 @@ directories.workspace = true
 open.workspace = true
 ureq.workspace = true
 rfd.workspace = true
+iced_aw.workspace = true

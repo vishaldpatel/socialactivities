@@ -7,6 +7,7 @@ mod list;
 mod lists;
 mod location;
 mod search;
+mod sky;
 mod ui;
 
 use std::cell::Cell;
