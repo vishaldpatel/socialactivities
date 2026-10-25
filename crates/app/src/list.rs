@@ -6,7 +6,7 @@ use chrono::{Datelike, NaiveDate, TimeDelta};
 use iced::widget::{Column, Row, button, column, row, scrollable, space, text};
 use iced::{Center, Element, Fill};
 use sdsa_core::catalog::{category_name, neighborhood_name};
-use sdsa_core::{Event, Group, Occurrence};
+use sdsa_core::{CostKind, Event, Group, Occurrence};
 
 use crate::app::{App, Bucket, Horizon, Message};
 use crate::{focusable, location, search, ui};
@@ -125,7 +125,11 @@ fn occurrence<'a>(
     let area = neighborhood_name(&event.neighborhood);
     let place = location::color_of(&event.neighborhood);
     let cost = event.cost.to_string();
-    let mut details = vec![(area, place), (cost.as_str(), None)];
+    let mut details = vec![(area, place)];
+    // Free is the norm, so only a cost worth knowing about is shown.
+    if event.cost.kind != CostKind::Free {
+        details.push((cost.as_str(), None));
+    }
     if let Some(g) = group {
         details.insert(0, (&g.name, None));
     }
