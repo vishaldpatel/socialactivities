@@ -112,6 +112,8 @@ pub enum Record {
     Event(Event),
 }
 
+// Only one editor is open at a time, so the size difference doesn't matter.
+#[allow(clippy::large_enum_variant)]
 pub enum Editor {
     Group(GroupForm),
     Event(EventForm),
@@ -410,6 +412,8 @@ pub struct EventForm {
     cancelled: String,
     /// The highlighted day while the date calendar is open.
     calendar: Option<NaiveDate>,
+    /// The list "Save to list" was switched to because the chosen group is in it.
+    moved_to: Option<String>,
 }
 
 impl EventForm {
@@ -444,13 +448,21 @@ impl EventForm {
                 .collect::<Vec<_>>()
                 .join(", "),
             calendar: None,
+            moved_to: None,
             original: e,
         }
     }
 
     /// Selects `g` and, for new events, copies its location and cost as a starting point.
-    pub fn choose_group(&mut self, g: &Group) {
+    /// If `g` is in one of your lists, the event is saved there too.
+    pub fn choose_group(&mut self, g: &Group, lists: &[ListInfo]) {
         self.group = GroupChoice::of(g);
+        self.moved_to = None;
+        let owned = lists.iter().any(|l| l.owned && l.id == g.list_id);
+        if owned && self.common.list_id != g.list_id {
+            self.common.list_id = g.list_id.clone();
+            self.moved_to = Some(g.list_id.clone());
+        }
         if self.common.is_new {
             self.common.neighborhood = find_neighborhood(&g.neighborhood);
             self.common.place = g.address.clone();
@@ -462,7 +474,10 @@ impl EventForm {
         }
     }
 
-    fn update(&mut self, field: Field, groups: &[Group]) {
+    fn update(&mut self, field: Field, groups: &[Group], lists: &[ListInfo]) {
+        if let Field::List(_) = field {
+            self.moved_to = None;
+        }
         if self.common.update(&field) {
             return;
         }
@@ -470,8 +485,11 @@ impl EventForm {
             Field::Name(s) => self.title = s,
             Field::Group(choice) => match groups.iter().find(|g| Some(&g.id) == choice.id.as_ref())
             {
-                Some(g) => self.choose_group(g),
-                None => self.group = GroupChoice::none(),
+                Some(g) => self.choose_group(g, lists),
+                None => {
+                    self.group = GroupChoice::none();
+                    self.moved_to = None;
+                }
             },
             Field::Date(s) => self.date = s,
             Field::OpenCalendar => {
@@ -596,9 +614,40 @@ impl EventForm {
             .collect()
     }
 
+    /// What choosing the group meant for where the event is saved: the list
+    /// it was moved to, or a warning if the group is in a list you don't maintain.
+    fn group_note<'a>(&self, groups: &[Group], lists: &[ListInfo]) -> Option<Element<'a, Message>> {
+        let group = groups.iter().find(|g| Some(&g.id) == self.group.id.as_ref())?;
+        let list = lists.iter().find(|l| l.id == group.list_id);
+        match list {
+            Some(list) if list.owned => (self.moved_to.as_ref() == Some(&list.id)
+                && self.common.list_id == list.id)
+                .then(|| {
+                    ui::muted(format!(
+                        "Saving to “{}”, the list {} is in.",
+                        list.name, group.name
+                    ))
+                    .into()
+                }),
+            _ => {
+                let list = list.map_or("a list".to_string(), |l| format!("“{}”", l.name));
+                Some(
+                    ui::warning(format!(
+                        "{} is in {list}, which you don't maintain. If that list is removed, \
+                         or an update drops this group, this event will lose its group, along \
+                         with the tags and categories it gets from it.",
+                        group.name
+                    ))
+                    .into(),
+                )
+            }
+        }
+    }
+
     fn view<'a>(
         &'a self,
         groups: &'a [Group],
+        lists: &[ListInfo],
         hidden: &HashSet<String>,
         all_tags: &'a [String],
         place_open: bool,
@@ -678,7 +727,8 @@ impl EventForm {
             labeled(
                 "Group",
                 pick_list(choices, Some(selected), |c| Message::Form(Field::Group(c))).width(Fill)
-            ),
+            )
+            .extend(self.group_note(groups, lists)),
             description(&self.common),
             schedule,
             row![
@@ -719,10 +769,10 @@ impl Editor {
         }
     }
 
-    pub fn update(&mut self, field: Field, groups: &[Group]) {
+    pub fn update(&mut self, field: Field, groups: &[Group], lists: &[ListInfo]) {
         match self {
             Editor::Group(f) => f.update(field),
-            Editor::Event(f) => f.update(field, groups),
+            Editor::Event(f) => f.update(field, groups, lists),
         }
     }
 
@@ -777,7 +827,13 @@ impl Editor {
 
         let fields = match self {
             Editor::Group(f) => f.view(&app.tags, app.place_open()),
-            Editor::Event(f) => f.view(&app.groups, &app.hidden, &app.tags, app.place_open()),
+            Editor::Event(f) => f.view(
+                &app.groups,
+                &app.list_infos,
+                &app.hidden,
+                &app.tags,
+                app.place_open(),
+            ),
         };
         let lists: Vec<ListChoice> = app.owned_lists().map(ListChoice::of).collect();
         let selected = lists.iter().find(|l| l.id == common.list_id).cloned();
@@ -956,6 +1012,47 @@ mod tests {
         assert_eq!(format_hours(100), "1.67");
     }
 
+    fn list(id: &str, owned: bool) -> ListInfo {
+        ListInfo {
+            id: id.into(),
+            name: id.into(),
+            description: String::new(),
+            updated_at: chrono::Utc::now(),
+            owned,
+            source: None,
+            update_url: None,
+        }
+    }
+
+    #[test]
+    fn choosing_a_group_in_your_list_saves_there() {
+        let lists = [list("mine", true), list("hiking", true), list("theirs", false)];
+        let mut hikers = Group::new("hiking");
+        hikers.name = "Hikers".into();
+        let mut runners = Group::new("theirs");
+        runners.name = "Runners".into();
+        let groups = [hikers.clone(), runners.clone()];
+        let start = NaiveDate::from_ymd_opt(2026, 10, 6)
+            .unwrap()
+            .and_hms_opt(19, 0, 0)
+            .unwrap();
+        let mut f = EventForm::new(Event::new("mine", start), true);
+
+        f.update(Field::Group(GroupChoice::of(&hikers)), &groups, &lists);
+        assert_eq!(f.common.list_id, "hiking");
+        assert!(f.group_note(&groups, &lists).is_some(), "says where it's saved");
+
+        // Picking a list yourself drops the note.
+        f.update(Field::List(ListChoice::of(&lists[0])), &groups, &lists);
+        assert_eq!(f.common.list_id, "mine");
+        assert!(f.group_note(&groups, &lists).is_none());
+
+        // A group in a list you don't maintain leaves the list alone, with a warning.
+        f.update(Field::Group(GroupChoice::of(&runners)), &groups, &lists);
+        assert_eq!(f.common.list_id, "mine");
+        assert!(f.group_note(&groups, &lists).is_some(), "warns");
+    }
+
     #[test]
     fn event_form_round_trips() {
         let start = NaiveDate::from_ymd_opt(2026, 10, 6)
@@ -1011,13 +1108,13 @@ mod tests {
             .and_hms_opt(19, 0, 0)
             .unwrap();
         let mut f = EventForm::new(Event::new("list", start), true);
-        f.update(Field::OpenCalendar, &[]);
+        f.update(Field::OpenCalendar, &[], &[]);
         assert_eq!(f.calendar, NaiveDate::from_ymd_opt(2026, 10, 6));
-        f.update(Field::Calendar(calendar::Action::Move(7)), &[]);
-        f.update(Field::Calendar(calendar::Action::Month(1)), &[]);
+        f.update(Field::Calendar(calendar::Action::Move(7)), &[], &[]);
+        f.update(Field::Calendar(calendar::Action::Month(1)), &[], &[]);
         let cursor = f.calendar.unwrap();
         assert_eq!(cursor, NaiveDate::from_ymd_opt(2026, 11, 13).unwrap());
-        f.update(Field::Calendar(calendar::Action::Pick(cursor)), &[]);
+        f.update(Field::Calendar(calendar::Action::Pick(cursor)), &[], &[]);
         assert_eq!(f.date, "11-13-2026");
         assert!(f.calendar.is_none());
     }
@@ -1042,14 +1139,14 @@ mod tests {
             .unwrap();
         let mut f = EventForm::new(Event::new("list", start), true);
         assert!(f.build().is_err(), "title required");
-        f.update(Field::Name("x".into()), &[]);
-        f.update(Field::Repeat(Repeat::Custom), &[]);
-        f.update(Field::Rule("FREQ=NOPE".into()), &[]);
+        f.update(Field::Name("x".into()), &[], &[]);
+        f.update(Field::Repeat(Repeat::Custom), &[], &[]);
+        f.update(Field::Rule("FREQ=NOPE".into()), &[], &[]);
         assert!(f.build().is_err(), "invalid rule");
-        f.update(Field::Rule("FREQ=DAILY".into()), &[]);
+        f.update(Field::Rule("FREQ=DAILY".into()), &[], &[]);
         assert!(f.build().is_err(), "neighborhood required");
         let hillcrest = find_neighborhood("hillcrest").unwrap();
-        f.update(Field::Neighborhood(hillcrest), &[]);
+        f.update(Field::Neighborhood(hillcrest), &[], &[]);
         assert!(f.build().is_ok());
     }
 }

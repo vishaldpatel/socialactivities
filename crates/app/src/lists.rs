@@ -129,6 +129,11 @@ pub fn read_location(location: &str) -> Result<String, String> {
 
 /// A file-name-friendly version of a list's name.
 pub fn file_name(name: &str) -> String {
+    format!("{}.json", slug_or(name, "list"))
+}
+
+/// `name` in lowercase words joined by hyphens, or `fallback` if nothing's left.
+pub fn slug_or(name: &str, fallback: &str) -> String {
     let slug: String = name
         .to_lowercase()
         .chars()
@@ -139,7 +144,7 @@ pub fn file_name(name: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-");
-    format!("{}.json", if slug.is_empty() { "list" } else { &slug })
+    if slug.is_empty() { fallback.into() } else { slug }
 }
 
 pub fn pick_file() -> Option<PathBuf> {
@@ -153,6 +158,14 @@ pub fn save_file(name: String) -> Option<PathBuf> {
     rfd::FileDialog::new()
         .set_title("Export list")
         .add_filter("Lists", &["json"])
+        .set_file_name(name)
+        .save_file()
+}
+
+pub fn save_calendar(name: String) -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .set_title("Add to Calendar")
+        .add_filter("Calendar files", &["ics"])
         .set_file_name(name)
         .save_file()
 }

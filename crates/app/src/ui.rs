@@ -2,7 +2,9 @@
 
 use iced::font::{Font, Weight};
 use iced::widget::text::{Rich, Span};
-use iced::widget::{Text, button, container, rich_text, span, text};
+use std::sync::LazyLock;
+
+use iced::widget::{Text, button, container, rich_text, span, svg, text, tooltip};
 use iced::{Color, Element, Theme};
 
 use crate::search;
@@ -39,6 +41,13 @@ fn muted_style(theme: &Theme) -> text::Style {
 
 pub fn muted<'a>(s: impl text::IntoFragment<'a>) -> Text<'a> {
     text(s).size(13).style(muted_style)
+}
+
+/// Small text in the theme's warning color, for consequences worth knowing.
+pub fn warning<'a>(s: impl text::IntoFragment<'a>) -> Text<'a> {
+    text(s).size(13).style(|theme: &Theme| text::Style {
+        color: Some(theme.extended_palette().warning.base.color),
+    })
 }
 
 /// Translucent yellow, readable on both light and dark themes.
@@ -125,6 +134,38 @@ pub fn gray(theme: &Theme, status: button::Status) -> button::Style {
         },
         _ => style,
     }
+}
+
+/// A calendar with a plus sign.
+pub static CALENDAR: LazyLock<svg::Handle> =
+    LazyLock::new(|| svg::Handle::from_memory(include_bytes!("../assets/calendar-plus.svg")));
+
+/// Two chain links.
+pub static LINK: LazyLock<svg::Handle> =
+    LazyLock::new(|| svg::Handle::from_memory(include_bytes!("../assets/link.svg")));
+
+/// A small gray button showing `icon`, the same height as a size-13 text
+/// button, with `label` as a tooltip on hover.
+pub fn icon_button<'a, M: Clone + 'a>(
+    icon: &svg::Handle,
+    label: impl text::IntoFragment<'a>,
+    msg: M,
+) -> Element<'a, M> {
+    let icon = svg(icon.clone())
+        .width(17)
+        .height(17)
+        .style(|theme: &Theme, _| svg::Style {
+            color: Some(theme.extended_palette().background.base.text),
+        });
+    tooltip(
+        crate::focusable::button(button(icon).padding([5, 7]).style(gray), msg),
+        container(text(label).size(13))
+            .padding([4, 8])
+            .style(container::bordered_box),
+        tooltip::Position::Top,
+    )
+    .gap(4)
+    .into()
 }
 
 /// A clickable tag chip; `selected` when it's part of the current search.

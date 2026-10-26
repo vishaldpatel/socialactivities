@@ -2,6 +2,7 @@
 
 pub mod catalog;
 pub mod db;
+pub mod ics;
 pub mod listfile;
 pub mod model;
 pub mod recurrence;

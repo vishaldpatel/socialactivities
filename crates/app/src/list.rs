@@ -160,14 +160,26 @@ fn occurrence<'a>(
     }
 
     let mut actions = row![].spacing(6);
-    if !event.url.is_empty() {
-        actions = actions.push(focusable::button(
-            button(text("Details").size(13)).style(ui::gray),
-            Message::OpenUrl(event.url.clone()),
+    // The event's own page, else its group's first link.
+    let link = if event.url.is_empty() {
+        group
+            .and_then(|g| g.links.first())
+            .map(|l| (link_label(&l.kind), &l.url))
+    } else {
+        Some(("Details".to_string(), &event.url))
+    };
+    if let Some((label, url)) = link {
+        actions = actions.push(ui::icon_button(
+            &ui::LINK,
+            label,
+            Message::OpenUrl(url.clone()),
         ));
-    } else if let Some(g) = group {
-        actions = actions.extend(link_buttons(g).take(1));
     }
+    actions = actions.push(ui::icon_button(
+        &ui::CALENDAR,
+        "Add to Calendar",
+        Message::AddToCalendar(event.id.clone()),
+    ));
     if app.can_edit(&event.list_id) {
         actions = actions.push(focusable::button(
             button(text("Edit").size(13)).style(button::text),

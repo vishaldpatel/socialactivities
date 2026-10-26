@@ -63,6 +63,10 @@ database in the platform data dir (e.g.
   Updates" re-reads the list's update URL (or wherever it was added from) and
   offers the new version only if its `updated_at` is newer. Your own events can
   still belong to their groups; they live in your list and survive updates.
+- **Choosing an event's group:** if the group is in a list you maintain, "Save
+  to list" switches to that list and a note says so. If it isn't, a warning
+  explains that the event loses its group should that list be removed or an
+  update drop the group.
 - **The built-in list** is `data/defaults.json`, compiled into the app. It's
   installed on first run and replaced whenever a newer copy ships, unless you
   maintain it or removed it.
@@ -91,6 +95,12 @@ The **Example:** groups are placeholders. Replace them with real, verified
 groups, using the "Last verified" field to track freshness.
 
 ## Other details
+
+The calendar button on an event (**Add to Calendar**, shown on hover) saves an `.ics` file that calendar apps
+(Google, Apple, Outlook, Thunderbird) can import. A recurring event is saved
+as the whole series, minus cancelled dates. All events are in San Diego time
+(`America/Los_Angeles`); time zones per list or event can come when the app
+covers other cities.
 
 Recurring events store an iCalendar RRULE (`FREQ=WEEKLY;BYDAY=TU`) plus a start
 time in San Diego local time, so times stay put across daylight saving changes.

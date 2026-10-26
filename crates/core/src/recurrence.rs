@@ -8,6 +8,8 @@ use crate::model::{Event, Occurrence};
 
 /// Everything in this app happens in San Diego.
 pub const TZ: Tz = Tz::America__Los_Angeles;
+/// [`TZ`]'s name, as calendars know it.
+pub const TZ_NAME: &str = "America/Los_Angeles";
 
 /// Upper bound on occurrences per event in one expansion.
 const MAX_OCCURRENCES: u16 = 1000;
@@ -33,7 +35,7 @@ fn localize(dt: NaiveDateTime) -> Result<chrono::DateTime<Tz>, RecurrenceError> 
 
 fn rule_set(start: NaiveDateTime, rule: &str) -> Result<RRuleSet, RecurrenceError> {
     let text = format!(
-        "DTSTART;TZID=America/Los_Angeles:{}\nRRULE:{}",
+        "DTSTART;TZID={TZ_NAME}:{}\nRRULE:{}",
         start.format("%Y%m%dT%H%M%S"),
         rule.trim().trim_start_matches("RRULE:")
     );

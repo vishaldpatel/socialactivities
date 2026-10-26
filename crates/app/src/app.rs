@@ -160,6 +160,9 @@ pub enum Message {
     Horizon(Horizon),
     SetHidden(String, bool),
     OpenUrl(String),
+    /// Saves an event as a calendar file, asking where first.
+    AddToCalendar(String),
+    CalendarSaved(String, Option<std::path::PathBuf>),
     NewGroup,
     EditGroup(String),
     NewEvent(Option<String>),
@@ -385,6 +388,30 @@ impl App {
                     self.error(format!("Couldn't open {url}: {e}"));
                 }
             }
+            Message::AddToCalendar(id) => {
+                if let Some(event) = self.events.iter().find(|e| e.id == id) {
+                    let name = format!("{}.ics", lists::slug_or(&event.title, "event"));
+                    return Task::perform(
+                        lists::in_background(move || lists::save_calendar(name)),
+                        move |path| Message::CalendarSaved(id.clone(), path),
+                    );
+                }
+            }
+            Message::CalendarSaved(id, Some(path)) => {
+                if let Some(event) = self.events.iter().find(|e| e.id == id) {
+                    let group = self.group(event.group_id.as_deref());
+                    let ics = sdsa_core::ics::calendar(event, group, chrono::Utc::now());
+                    match std::fs::write(&path, ics) {
+                        Ok(()) => self.info(format!(
+                            "Saved {}. Open it to add “{}” to your calendar.",
+                            path.display(),
+                            event.title
+                        )),
+                        Err(e) => self.error(format!("Couldn't save {}: {e}", path.display())),
+                    }
+                }
+            }
+            Message::CalendarSaved(_, None) => {}
             Message::NewGroup => {
                 if let Some(list) = self.target_list(None) {
                     let group = Group::new(&list);
@@ -412,7 +439,7 @@ impl App {
                     .unwrap_or_default();
                 let mut f = form::EventForm::new(Event::new(&list, start), true);
                 if let Some(g) = &group {
-                    f.choose_group(g);
+                    f.choose_group(g, &self.list_infos);
                 }
                 self.editor = Some(Editor::Event(f));
             }
@@ -436,7 +463,7 @@ impl App {
                     _ => None,
                 };
                 if let Some(editor) = &mut self.editor {
-                    editor.update(field, &self.groups);
+                    editor.update(field, &self.groups, &self.list_infos);
                 }
                 if let Some(id) = focus {
                     return operation::focus(id);
