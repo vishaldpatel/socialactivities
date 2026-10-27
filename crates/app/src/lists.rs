@@ -16,6 +16,8 @@ const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub enum Msg {
+    /// Turns a list on or off.
+    SetOn(String, bool),
     NewList,
     Edit(String),
     EditName(String),
@@ -257,9 +259,14 @@ fn card<'a>(app: &'a App, list: &'a ListInfo) -> Element<'a, Message> {
         return edit_form(edit);
     }
 
+    let on = app.is_on(&list.id);
     let title = row![
         ui::bold(list.name.as_str()).size(17),
         ui::chip(if list.owned { "Yours" } else { "Added" }),
+        space::horizontal(),
+        focusable::toggler(on, if on { "On" } else { "Off" }, |on| {
+            Message::Lists(Msg::SetOn(list.id.clone(), on))
+        }),
     ]
     .spacing(8)
     .align_y(Center);
@@ -279,6 +286,12 @@ fn card<'a>(app: &'a App, list: &'a ListInfo) -> Element<'a, Message> {
     .spacing(6);
     if !list.description.is_empty() {
         body = body.push(text(list.description.as_str()).size(14));
+    }
+    if !on {
+        body = body.push(ui::warning(
+            "Turned off: its groups and events aren't shown, and its groups can't be \
+             chosen for events.",
+        ));
     }
     if list.owned {
         if let Some(url) = &list.update_url {

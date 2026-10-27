@@ -200,6 +200,7 @@ pub fn groups(app: &App) -> Element<'_, Message> {
     let visible: Vec<&Group> = app
         .groups
         .iter()
+        .filter(|g| app.is_on(&g.list_id))
         .filter(|g| app.filters.group(g, &app.hidden, app.viewing_hidden))
         .collect();
 

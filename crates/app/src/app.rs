@@ -13,7 +13,7 @@ use crate::form::{self, Editor, Record};
 use crate::lists::{self, Lists, UpdateState};
 use crate::location::{self, Area};
 use crate::{calendar, focus, focusable};
-use crate::{list, search, ui};
+use crate::{list, saved, search, ui};
 
 /// The scroll area of whichever panel is showing on the right.
 pub const MAIN_SCROLL: &str = "main-scroll";
@@ -193,6 +193,8 @@ pub struct App {
     pub groups: Vec<Group>,
     pub events: Vec<Event>,
     pub hidden: HashSet<String>,
+    /// Lists turned off in the Lists panel; their groups and events aren't shown.
+    pub lists_off: HashSet<String>,
     /// Every free-form tag in use, sorted.
     pub tags: Vec<String>,
     /// Upcoming occurrences of `events` within `horizon`, before filtering.
@@ -202,6 +204,8 @@ pub struct App {
     pub horizon: Horizon,
     /// The Groups panel is listing hidden groups instead of visible ones.
     pub viewing_hidden: bool,
+    /// The filters, grouping and range as last saved, to save again only on a change.
+    saved_view: String,
     /// The location dropdown that's open, if any.
     open_dropdown: Option<location::Dropdown>,
     tab: Tab,
@@ -219,17 +223,24 @@ impl App {
             groups: Vec::new(),
             events: Vec::new(),
             hidden: HashSet::new(),
+            lists_off: HashSet::new(),
             tags: Vec::new(),
             occurrences: Vec::new(),
             filters: Filters::default(),
             bucket: Bucket::Day,
             horizon: Horizon::Month,
             viewing_hidden: false,
+            saved_view: String::new(),
             open_dropdown: None,
             tab: Tab::Events,
             editor: None,
             status,
         };
+        // Restored before loading, which drops tags no longer in use.
+        if let Ok(Some(view)) = app.store.setting(saved::KEY) {
+            saved::decode(&view, &mut app.filters, &mut app.bucket, &mut app.horizon);
+            app.saved_view = view;
+        }
         app.reload();
         app
     }
@@ -253,12 +264,25 @@ impl App {
         self.list_infos.iter().filter(|l| l.owned)
     }
 
-    /// Hidden groups that still exist; the hidden list can outlive a group
-    /// removed from the curated defaults.
+    /// Whether `list_id`'s groups and events are shown.
+    pub fn is_on(&self, list_id: &str) -> bool {
+        !self.lists_off.contains(list_id)
+    }
+
+    /// Groups that can't be chosen for an event: hidden ones, and those in
+    /// lists turned off.
+    pub fn not_offered(&self) -> HashSet<String> {
+        let off = self.groups.iter().filter(|g| !self.is_on(&g.list_id));
+        let off = off.map(|g| g.id.clone());
+        self.hidden.iter().cloned().chain(off).collect()
+    }
+
+    /// Hidden groups that still exist, in lists that are on; the hidden list
+    /// can outlive a group removed from the curated defaults.
     pub fn hidden_count(&self) -> usize {
         self.groups
             .iter()
-            .filter(|g| self.hidden.contains(&g.id))
+            .filter(|g| self.hidden.contains(&g.id) && self.is_on(&g.list_id))
             .count()
     }
 
@@ -306,20 +330,24 @@ impl App {
                 self.store.groups()?,
                 self.store.events()?,
                 self.store.hidden_groups()?,
+                self.store.lists_off()?,
             ))
         })();
         match loaded {
-            Ok((lists, groups, events, hidden)) => {
+            Ok((lists, groups, events, hidden, lists_off)) => {
                 self.list_infos = lists;
                 self.groups = groups;
                 self.events = events;
                 self.hidden = hidden;
+                self.lists_off = lists_off;
                 // Leave the hidden view once the last group is unhidden.
                 if self.hidden_count() == 0 {
                     self.viewing_hidden = false;
                 }
-                let in_use: BTreeSet<&String> = (self.groups.iter().flat_map(|g| &g.tags))
-                    .chain(self.events.iter().flat_map(|e| &e.tags))
+                let groups = self.groups.iter().filter(|g| self.is_on(&g.list_id));
+                let events = self.events.iter().filter(|e| self.is_on(&e.list_id));
+                let in_use: BTreeSet<&String> = (groups.flat_map(|g| &g.tags))
+                    .chain(events.flat_map(|e| &e.tags))
                     .collect();
                 self.tags = in_use.into_iter().cloned().collect();
                 // Drop selections for tags that no longer exist.
@@ -330,16 +358,32 @@ impl App {
         self.expand();
     }
 
+    /// Saves the filters, grouping and range if they changed.
+    fn save_view(&mut self) {
+        let view = saved::encode(&self.filters, self.bucket, self.horizon);
+        if view != self.saved_view {
+            match self.store.set_setting(saved::KEY, &view) {
+                Ok(()) => self.saved_view = view,
+                Err(e) => self.error(format!("Couldn't save your filters: {e}")),
+            }
+        }
+    }
+
     fn expand(&mut self) {
         let from = recurrence::now_local().date().and_time(NaiveTime::MIN);
         let to = from + TimeDelta::days(self.horizon.days());
         self.occurrences = recurrence::occurrences(&self.events, from, to);
+        let events = &self.events;
+        let lists_off = &self.lists_off;
+        self.occurrences
+            .retain(|o| !lists_off.contains(&events[o.event].list_id));
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         let was_editing = self.editor.is_some();
         let tab = self.tab;
         let task = self.handle(message);
+        self.save_view();
         // A dropdown doesn't stay open across a change of panel or form.
         if self.tab != tab || self.editor.is_some() != was_editing {
             self.open_dropdown = None;
@@ -503,6 +547,10 @@ impl App {
         use lists::Msg;
         let wrap = Message::Lists;
         match msg {
+            Msg::SetOn(id, on) => match self.store.set_list_on(&id, on) {
+                Ok(()) => self.reload(),
+                Err(e) => self.error(e),
+            },
             Msg::NewList => match self.store.create_list("New List") {
                 Ok(list) => {
                     self.reload();
@@ -729,13 +777,20 @@ impl App {
                 editor.set_error(msg);
                 return;
             }
-            Ok(Record::Group(g)) => self.store.save_group(&g).map(|()| g.name),
-            Ok(Record::Event(e)) => self.store.save_event(&e).map(|()| e.title),
+            Ok(Record::Group(g)) => self.store.save_group(&g).map(|()| (g.name, g.list_id)),
+            Ok(Record::Event(e)) => self.store.save_event(&e).map(|()| (e.title, e.list_id)),
         };
         match result {
-            Ok(name) => {
+            Ok((name, list_id)) => {
                 self.editor = None;
-                self.status = Some((format!("Saved “{name}”"), false));
+                let mut msg = format!("Saved “{name}”");
+                if !self.is_on(&list_id) {
+                    msg += &format!(
+                        " to “{}”, which is turned off. Turn it on in Lists to see it.",
+                        self.list_name(&list_id)
+                    );
+                }
+                self.status = Some((msg, false));
                 self.reload();
             }
             Err(e) => editor.set_error(e.to_string()),
@@ -979,6 +1034,45 @@ mod tests {
             ..Filters::default()
         };
         assert!(filters.is_active());
+    }
+
+    #[test]
+    fn lists_turned_off_hide_their_groups_events_and_tags() {
+        let mut store = Store::in_memory().unwrap();
+        let list = store.default_list().unwrap();
+        let mut g = Group::new(&list.id);
+        g.name = "Trivia".into();
+        g.tags = vec!["trivia".into()];
+        store.save_group(&g).unwrap();
+        let mut e = Event::new(&list.id, recurrence::now_local() + TimeDelta::days(1));
+        e.group_id = Some(g.id.clone());
+        store.save_event(&e).unwrap();
+        let mut app = App::new(store, None);
+        assert_eq!(app.occurrences.len(), 1);
+        assert_eq!(app.tags, ["trivia"]);
+        assert!(!app.not_offered().contains(&g.id));
+
+        let _ = app.update(Message::Lists(lists::Msg::SetOn(list.id.clone(), false)));
+        assert!(!app.is_on(&list.id));
+        assert!(app.occurrences.is_empty());
+        assert!(app.tags.is_empty());
+        assert!(app.not_offered().contains(&g.id));
+
+        let _ = app.update(Message::Lists(lists::Msg::SetOn(list.id.clone(), true)));
+        assert_eq!(app.occurrences.len(), 1);
+    }
+
+    #[test]
+    fn filters_are_there_after_a_restart() {
+        let mut app = App::new(Store::in_memory().unwrap(), None);
+        let _ = app.update(Message::Category("chill", true));
+        let _ = app.update(Message::Horizon(Horizon::TenDays));
+        let _ = app.update(Message::Search("trivia".into()));
+
+        let app = App::new(app.store, None);
+        assert!(app.filters.categories.contains("chill"));
+        assert_eq!(app.horizon, Horizon::TenDays);
+        assert_eq!(app.filters.search, "");
     }
 
     #[test]

@@ -93,6 +93,21 @@ pub fn checkbox<'a, M: Clone + 'a>(
     focusable(checkbox, on_activate(toggled))
 }
 
+/// An on/off switch Tab can reach; Space or Enter flips it.
+pub fn toggler<'a, M: Clone + 'a>(
+    on: bool,
+    label: &'a str,
+    on_toggle: impl Fn(bool) -> M + 'a,
+) -> Element<'a, M> {
+    let toggled = on_toggle(!on);
+    let toggler = iced::widget::toggler(on)
+        .label(label)
+        .on_toggle(on_toggle)
+        .size(18)
+        .text_size(14);
+    focusable(toggler, on_activate(toggled))
+}
+
 /// Turns a key press into a message, if the key does anything.
 type OnKey<'a, M> = Box<dyn Fn(&keyboard::Key) -> Option<M> + 'a>;
 

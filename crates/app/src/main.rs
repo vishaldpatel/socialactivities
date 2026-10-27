@@ -6,6 +6,7 @@ mod form;
 mod list;
 mod lists;
 mod location;
+mod saved;
 mod search;
 mod sky;
 mod ui;

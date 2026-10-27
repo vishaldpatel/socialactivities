@@ -192,6 +192,15 @@ impl Store {
         Ok(self.owned_list(&id).ok().map(|l| l.id))
     }
 
+    /// A small preference saved in the database, such as the app's filters.
+    pub fn setting(&self, key: &str) -> Result<Option<String>> {
+        Ok(db::setting(&self.conn, key)?)
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        Ok(db::set_setting(&self.conn, key, value)?)
+    }
+
     fn remember_list(&self, id: &str) -> Result<()> {
         Ok(db::set_setting(&self.conn, LAST_LIST, id)?)
     }
@@ -301,6 +310,16 @@ impl Store {
             Ok(_) => self.update_list(file),
             Err(e) => Err(e),
         }
+    }
+
+    /// Lists turned off, by id. Their groups and events stay in the database,
+    /// and keep updating, but aren't shown.
+    pub fn lists_off(&self) -> Result<HashSet<String>> {
+        Ok(db::load_lists_off(&self.conn)?.into_iter().collect())
+    }
+
+    pub fn set_list_on(&self, id: &str, on: bool) -> Result<()> {
+        Ok(db::set_list_on(&self.conn, id, on)?)
     }
 
     /// Groups the user has chosen to hide, by id, across all lists.
@@ -493,6 +512,28 @@ mod tests {
         store.update_list(&v3).unwrap();
         let moved = store.list(&list.id).unwrap();
         assert_eq!(moved.update_url.as_deref(), Some("https://y.org/l.json"));
+    }
+
+    #[test]
+    fn lists_stay_off_through_updates_but_not_removal() {
+        let (source, list, _, _) = store_with_list();
+        let mut store = Store::in_memory().unwrap();
+        let v1 = published(&source, &list, "2026-10-01T00:00:00Z");
+        store.add_list(&v1, None, false).unwrap();
+        store.set_list_on(&list.id, false).unwrap();
+        assert!(store.lists_off().unwrap().contains(&list.id));
+
+        let newer = published(&source, &list, "2026-10-02T00:00:00Z");
+        store.update_list(&newer).unwrap();
+        assert!(store.lists_off().unwrap().contains(&list.id));
+
+        store.remove_list(&list.id).unwrap();
+        store.add_list(&newer, None, false).unwrap();
+        assert!(store.lists_off().unwrap().is_empty());
+
+        store.set_list_on(&list.id, false).unwrap();
+        store.set_list_on(&list.id, true).unwrap();
+        assert!(store.lists_off().unwrap().is_empty());
     }
 
     #[test]

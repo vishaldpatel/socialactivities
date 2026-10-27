@@ -48,6 +48,9 @@ Weeks start on Monday. Each event's time sits on a sky color for its start
 time (night navy, dawn purple, daytime blue, afternoon gold, sunset orange);
 the colors are in `crates/app/src/sky.rs`.
 
+Your filters (area, categories, tags) and the Events panel's grouping and
+range are remembered between runs, in your database. The search text isn't.
+
 ## Layout
 
 ```
@@ -82,6 +85,12 @@ database in the platform data dir (e.g.
   "Check for Updates" gets changes between releases. (The earlier built-in
   list, "San Diego Social Activities", is removed on launch unless you
   maintain it.)
+- **Turning a list off** (the On/Off switch on its card) hides its groups and events
+  from the Events and Groups panels, its tags from the tag filter, and its
+  groups from the event editor's group picker. Nothing is deleted, and the
+  list still updates. Your own events in a list that's on still show, even
+  when their group's list is off. Lists stay off until you turn them back on;
+  removing a list forgets it.
 
 Hidden groups are remembered by id across all lists. Group and event ids must
 be unique across lists; adding a list that reuses another list's ids is

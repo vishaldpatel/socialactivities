@@ -139,6 +139,8 @@ const SCHEMA: &[&str] = &[
     "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
     // v6: logos were removed.
     "ALTER TABLE groups DROP COLUMN logo_path;",
+    // v7: lists turned off, whose groups and events aren't shown.
+    "CREATE TABLE lists_off (id TEXT PRIMARY KEY);",
 ];
 
 static MIGRATIONS: LazyLock<Migrations<'static>> =
@@ -549,6 +551,7 @@ pub fn delete_list(conn: &mut Connection, id: &str) -> Result<()> {
     let tx = conn.transaction()?;
     clear_list(&tx, id)?;
     tx.execute("DELETE FROM lists WHERE id = ?1", [id])?;
+    tx.execute("DELETE FROM lists_off WHERE id = ?1", [id])?;
     tx.execute("INSERT OR IGNORE INTO removed_lists (id) VALUES (?1)", [id])?;
     tx.commit()?;
     Ok(())
@@ -606,6 +609,23 @@ pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         [key, value],
     )?;
+    Ok(())
+}
+
+pub fn load_lists_off(conn: &Connection) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare("SELECT id FROM lists_off")?;
+    let ids = stmt
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(ids)
+}
+
+pub fn set_list_on(conn: &Connection, id: &str, on: bool) -> Result<()> {
+    if on {
+        conn.execute("DELETE FROM lists_off WHERE id = ?1", [id])?;
+    } else {
+        conn.execute("INSERT OR IGNORE INTO lists_off (id) VALUES (?1)", [id])?;
+    }
     Ok(())
 }
 

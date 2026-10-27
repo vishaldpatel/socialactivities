@@ -830,7 +830,7 @@ impl Editor {
             Editor::Event(f) => f.view(
                 &app.groups,
                 &app.list_infos,
-                &app.hidden,
+                &app.not_offered(),
                 &app.tags,
                 app.place_open(),
             ),
