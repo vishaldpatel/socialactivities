@@ -14,3 +14,37 @@ open.workspace = true
 ureq.workspace = true
 rfd.workspace = true
 iced_aw.workspace = true
+
+[build-dependencies]
+winresource = "0.1"
+
+# Linux packages, built by .github/workflows/release.yml with cargo-deb and
+# cargo-generate-rpm. Paths are relative to this directory.
+[package.metadata.deb]
+name = "sd-social-activities"
+maintainer = "Vishal Patel"
+copyright = "2026, Vishal Patel"
+license-file = ["../../LICENSE", "0"]
+section = "misc"
+extended-description = "Browse groups and events around San Diego County where you take part: run clubs, pickup sports, game nights, classes and more."
+depends = "$auto, libxkbcommon0, libvulkan1 | libegl1"
+recommends = "xdg-desktop-portal"
+assets = [
+    ["target/release/sdsa", "usr/bin/", "755"],
+    ["../../packaging/linux/io.github.vishaldpatel.sdsa.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/icon-256.png", "usr/share/icons/hicolor/256x256/apps/io.github.vishaldpatel.sdsa.png", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "sd-social-activities"
+summary = "Groups and events around San Diego County where you take part"
+url = "https://github.com/vishaldpatel/socialactivities"
+assets = [
+    { source = "target/release/sdsa", dest = "/usr/bin/sdsa", mode = "755" },
+    { source = "../../packaging/linux/io.github.vishaldpatel.sdsa.desktop", dest = "/usr/share/applications/io.github.vishaldpatel.sdsa.desktop", mode = "644" },
+    { source = "../../packaging/icon-256.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.vishaldpatel.sdsa.png", mode = "644" },
+    { source = "../../LICENSE", dest = "/usr/share/licenses/sd-social-activities/LICENSE", mode = "644", doc = true },
+]
+
+[package.metadata.generate-rpm.requires]
+libxkbcommon = "*"

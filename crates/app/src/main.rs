@@ -1,3 +1,6 @@
+// Release builds on Windows open without a console window beside them.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 mod calendar;
 mod focus;
@@ -25,6 +28,13 @@ usage: sdsa [--user PATH]
 
 /// Draws the whole interface this much larger than Iced's defaults.
 const SCALE: f32 = 1.25;
+
+/// The app's id on Linux, matching its desktop file's name.
+#[cfg(target_os = "linux")]
+const APP_ID: &str = "io.github.vishaldpatel.sdsa";
+
+/// The window icon, 64×64 RGBA, made by `packaging/make-icons.sh`.
+const ICON: &[u8] = include_bytes!("../../../packaging/icon-64.rgba");
 
 /// The curated list that ships with the app. Installed on first run and
 /// replaced whenever a newer copy ships, unless you maintain it or removed it.
@@ -93,6 +103,13 @@ fn main() -> iced::Result {
         Ok(opened) => opened,
         Err(msg) => {
             eprintln!("{msg}");
+            // A Windows release has no console to print to.
+            #[cfg(windows)]
+            rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Error)
+                .set_title("San Diego Social Activities")
+                .set_description(&msg)
+                .show();
             std::process::exit(2);
         }
     };
@@ -109,7 +126,21 @@ fn main() -> iced::Result {
     )
     .title(app::App::title)
     .subscription(app::App::subscription)
+    .window(window_settings())
     .scale_factor(|_| SCALE)
     .window_size((1100.0 * SCALE, 760.0 * SCALE))
     .run()
+}
+
+fn window_settings() -> iced::window::Settings {
+    iced::window::Settings {
+        icon: iced::window::icon::from_rgba(ICON.to_vec(), 64, 64).ok(),
+        // Wayland matches this to the desktop file for the dock icon and name.
+        #[cfg(target_os = "linux")]
+        platform_specific: iced::window::settings::PlatformSpecific {
+            application_id: APP_ID.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
 }

@@ -1,0 +1,182 @@
+# Builds the app for Linux, Windows and macOS. Pushing a tag like v0.2.0 also
+# drafts a GitHub Release with everything attached; publish it from the
+# Releases page once it looks right. Running it by hand (Actions → Release →
+# Run workflow) only builds, leaving the files as workflow artifacts.
+#
+# Produces:
+#   Linux    .deb (Debian, Ubuntu, Mint), .rpm (Fedora, openSUSE),
+#            .pkg.tar.zst (Arch, Manjaro), and a plain .tar.gz
+#   Windows  an installer (.exe) and a portable .zip
+#   macOS    a .dmg with a universal (Apple Silicon + Intel) app
+#
+# Nothing is code-signed, so Windows and macOS warn the first time it opens.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux:
+    # The oldest supported Ubuntu, so the binary runs on older glibc too.
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: version
+        name: Read the version, and check it matches the tag
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match version $version in Cargo.toml"
+            exit 1
+          fi
+      - id: rust
+        run: echo "version=$(sed -n 's/^rust = "\(.*\)"/\1/p' mise.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p sdsa
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+      - name: Package
+        run: |
+          version=${{ steps.version.outputs.version }}
+          id=io.github.vishaldpatel.sdsa
+          mkdir -p dist stage
+          cargo deb -p sdsa --no-build --no-strip -o dist/
+          cargo generate-rpm -p crates/app -o dist/
+          cp target/release/sdsa README.md LICENSE packaging/linux/$id.desktop stage/
+          cp packaging/icon-256.png stage/$id.png
+          tar -C stage -czf dist/sd-social-activities-$version-linux-x86_64.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  arch:
+    needs: linux
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist
+      - name: Package for pacman
+        run: |
+          version=${{ needs.linux.outputs.version }}
+          mkdir build out
+          cp packaging/arch/PKGBUILD dist/sd-social-activities-$version-linux-x86_64.tar.gz build/
+          sed -i "s/^pkgver=.*/pkgver=$version/" build/PKGBUILD
+          # makepkg won't run as root.
+          useradd -m builder
+          chown -R builder build
+          su builder -c "cd build && makepkg -f --nodeps"
+          cp build/*.pkg.tar.zst out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: out/*
+
+  windows:
+    needs: linux
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: rust
+        run: echo "version=$(sed -n 's/^rust = "\(.*\)"/\1/p' mise.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p sdsa
+      - name: Installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DVersion=${{ needs.linux.outputs.version }} packaging\windows\sdsa.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Portable zip
+        run: 7z a dist/sd-social-activities-${{ needs.linux.outputs.version }}-windows-x64-portable.zip ./target/release/sdsa.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+
+  macos:
+    needs: linux
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: rust
+        run: echo "version=$(sed -n 's/^rust = "\(.*\)"/\1/p' mise.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - run: |
+          cargo build --release --locked -p sdsa --target aarch64-apple-darwin
+          cargo build --release --locked -p sdsa --target x86_64-apple-darwin
+      - name: App bundle and disk image
+        run: |
+          version=${{ needs.linux.outputs.version }}
+          app="dmg/San Diego Social Activities.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" dist
+          lipo -create -output "$app/Contents/MacOS/sdsa" \
+            target/aarch64-apple-darwin/release/sdsa target/x86_64-apple-darwin/release/sdsa
+          sed "s/@VERSION@/$version/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
+
+          mkdir sdsa.iconset
+          for size in 16 32 128 256 512; do
+            sips -z $size $size packaging/icon-1024.png --out sdsa.iconset/icon_${size}x${size}.png
+            sips -z $((size * 2)) $((size * 2)) packaging/icon-1024.png --out sdsa.iconset/icon_${size}x${size}@2x.png
+          done
+          iconutil -c icns sdsa.iconset -o "$app/Contents/Resources/sdsa.icns"
+
+          # An ad-hoc signature: not trusted by Gatekeeper, but without one
+          # macOS calls a downloaded Apple Silicon app "damaged".
+          codesign --force --deep --sign - "$app"
+
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "San Diego Social Activities" -srcfolder dmg -ov -format UDZO \
+            dist/sd-social-activities-$version-macos-universal.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, arch, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: dist/*

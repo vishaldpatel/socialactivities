@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=San Diego Social Activities
+GenericName=Activity Finder
+Comment=Groups and events around San Diego County where you take part
+Exec=sdsa
+Icon=io.github.vishaldpatel.sdsa
+Terminal=false
+Categories=Utility;
+Keywords=events;groups;meetup;run club;games;San Diego;
+StartupWMClass=io.github.vishaldpatel.sdsa

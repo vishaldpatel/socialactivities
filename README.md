@@ -21,6 +21,39 @@ cargo run -p sdsa       # optionally: -- --user PATH to use another database
 cargo test --workspace
 ```
 
+## Installing
+
+Download the file for your system from the
+[Releases page](https://github.com/vishaldpatel/socialactivities/releases):
+
+| System | File | Install |
+|---|---|---|
+| Windows | `…-windows-x64-setup.exe` | Run it. Windows may say "Windows protected your PC": choose **More info → Run anyway**. Or use the portable `.zip`. |
+| macOS | `…-macos-universal.dmg` | Open it and drag the app to Applications. The first time, macOS refuses to open it: go to **System Settings → Privacy & Security** and press **Open Anyway**. |
+| Debian, Ubuntu, Mint | `….deb` | `sudo apt install ./sd-social-activities_*.deb` |
+| Fedora, openSUSE | `….rpm` | `sudo dnf install ./sd-social-activities-*.rpm` (openSUSE: `sudo zypper install`) |
+| Arch, Manjaro | `….pkg.tar.zst` | `sudo pacman -U sd-social-activities-*.pkg.tar.zst` |
+| Other Linux | `…-linux-x86_64.tar.gz` | Unpack it and run `sdsa`. |
+
+The warnings on Windows and macOS are because the app isn't code-signed.
+
+## Releasing
+
+`.github/workflows/release.yml` builds every package above.
+
+1. Copy the hosted run clubs list over `data/defaults.json` (see
+   [Curating the built-in list](#curating-the-built-in-list)).
+2. Bump `version` in the root `Cargo.toml`, run `cargo build` so
+   `Cargo.lock` follows, and commit.
+3. `git tag v0.2.0 && git push origin v0.2.0` (the tag must match the version).
+4. When the workflow finishes, a draft release with all the files is waiting
+   on the Releases page. Check it, edit the notes, and publish.
+
+Actions → Release → Run workflow builds everything without releasing, to try
+changes to the packaging. Packaging files live in `packaging/`; after editing
+`packaging/icon.svg`, run `packaging/make-icons.sh` (needs `rsvg-convert` and
+ImageMagick) and commit the results.
+
 ## Keyboard
 
 | Keys | Does |
@@ -62,6 +95,7 @@ range are remembered between runs, in your database. The search text isn't.
 crates/core          sdsa-core: model, SQLite storage, list files, recurrence (no UI)
 crates/app           sdsa: the Iced desktop app
 data/defaults.json   the built-in list (run clubs) compiled into the app
+packaging/           icons, desktop file, Info.plist, installer and PKGBUILD for releases
 ```
 
 ## Lists

@@ -1,0 +1,22 @@
+# Packages the prebuilt Linux release (sd-social-activities-<ver>-linux-x86_64.tar.gz,
+# placed next to this file) for pacman. CI sets pkgver from the tag.
+pkgname=sd-social-activities
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Groups and events around San Diego County where you take part"
+arch=('x86_64')
+url="https://github.com/vishaldpatel/socialactivities"
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'hicolor-icon-theme' 'libxkbcommon' 'vulkan-icd-loader')
+optdepends=('xdg-desktop-portal: file dialogs for adding and exporting lists')
+options=('!strip' '!debug')
+source=("$pkgname-$pkgver-linux-x86_64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  local id=io.github.vishaldpatel.sdsa
+  install -Dm755 sdsa "$pkgdir/usr/bin/sdsa"
+  install -Dm644 "$id.desktop" "$pkgdir/usr/share/applications/$id.desktop"
+  install -Dm644 "$id.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/$id.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
