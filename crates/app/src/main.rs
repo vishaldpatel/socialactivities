@@ -58,8 +58,18 @@ fn user_path(arg: Option<PathBuf>) -> Result<PathBuf, String> {
     Ok(dir.join("user.sqlite"))
 }
 
+/// The list that shipped before the run clubs, mostly placeholder groups.
+/// Removed from databases that still have a read-only copy.
+const RETIRED_LIST: &str = "sd-social-activities";
+
 /// Installs or updates the bundled list, returning a message worth showing.
 fn install_bundled(store: &mut Store) -> Option<(String, bool)> {
+    let retired = store
+        .lists()
+        .is_ok_and(|lists| lists.iter().any(|l| l.id == RETIRED_LIST && !l.owned));
+    if retired && let Err(e) = store.remove_list(RETIRED_LIST) {
+        return Some((format!("Couldn't remove the old built-in list: {e}"), true));
+    }
     let result = ListFile::parse(BUNDLED_LIST)
         .map_err(sdsa_core::store::StoreError::from)
         .and_then(|file| Ok((store.install_bundled(&file)?, file.name)));

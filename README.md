@@ -6,6 +6,13 @@ dancing), as opposed to watching. See [spec.md](spec.md) for the original idea.
 
 Built with Rust, [Iced](https://iced.rs) 0.14 and SQLite.
 
+The app starts with one list, San Diego run clubs. **Find more lists**, such
+as game nights, group classes and cars & coffee meetups, at
+[vishaldpatel.github.io/social-group-and-event-lists](https://vishaldpatel.github.io/social-group-and-event-lists/)
+(San Diego County lists are under San Diego). Copy a list's link and paste it
+into Lists → Add from URL, or download it and add the file. Made a list of
+your own? Export it and share it there.
+
 ## Running
 
 ```sh
@@ -46,7 +53,7 @@ the colors are in `crates/app/src/sky.rs`.
 ```
 crates/core          sdsa-core: model, SQLite storage, list files, recurrence (no UI)
 crates/app           sdsa: the Iced desktop app
-data/defaults.json   the curated list compiled into the app
+data/defaults.json   the built-in list (run clubs) compiled into the app
 ```
 
 ## Lists
@@ -61,15 +68,20 @@ database in the platform data dir (e.g.
   you last saved to.
 - **Added lists** come from a `.json` file or URL and are read-only. "Check for
   Updates" re-reads the list's update URL (or wherever it was added from) and
-  offers the new version only if its `updated_at` is newer. Your own events can
+  offers the new version only if its `updated_at` is newer. A new version
+  without an update URL keeps the one already known. Your own events can
   still belong to their groups; they live in your list and survive updates.
 - **Choosing an event's group:** if the group is in a list you maintain, "Save
   to list" switches to that list and a note says so. If it isn't, a warning
   explains that the event loses its group should that list be removed or an
   update drop the group.
-- **The built-in list** is `data/defaults.json`, compiled into the app. It's
+- **The built-in list** is `data/defaults.json`, compiled into the app: a copy
+  of the run clubs list hosted on the [lists site](https://vishaldpatel.github.io/social-group-and-event-lists/). It's
   installed on first run and replaced whenever a newer copy ships, unless you
-  maintain it or removed it.
+  maintain it or removed it. Its update URL points at the hosted file, so
+  "Check for Updates" gets changes between releases. (The earlier built-in
+  list, "San Diego Social Activities", is removed on launch unless you
+  maintain it.)
 
 Hidden groups are remembered by id across all lists. Group and event ids must
 be unique across lists; adding a list that reuses another list's ids is
@@ -79,39 +91,14 @@ The list file format is defined in `crates/core/src/listfile.rs`.
 
 ## Curating the built-in list
 
-1. In the app's Lists panel, add `data/defaults.json` with **I maintain this
-   list** ticked. It becomes editable on your machine and is never overwritten
-   by the bundled copy or by updates.
+The run clubs list is maintained on the [lists site](https://vishaldpatel.github.io/social-group-and-event-lists/), at
+`SanDiegoCounty/run-clubs.json`.
+
+1. In the app's Lists panel, add that file with **I maintain this list**
+   ticked. It becomes editable on your machine and is never overwritten by the
+   bundled copy or by updates.
 2. Edit its groups and events as usual. Each edit bumps its `updated_at`.
-3. **Export…** it back over `data/defaults.json` and rebuild. Everyone else's
-   app replaces their read-only copy with yours because it's newer.
-
-To let people get changes without a new app release, set the list's **Update
-URL** (Lists → Edit) to where you'll host the exported file, e.g. its raw
-GitHub URL. Exports include it, and everyone's "Check for Updates" fetches from
-there.
-
-The **Example:** groups are placeholders. Replace them with real, verified
-groups, using the "Last verified" field to track freshness.
-
-## Other details
-
-The calendar button on an event (**Add to Calendar**, shown on hover) saves an `.ics` file that calendar apps
-(Google, Apple, Outlook, Thunderbird) can import. A recurring event is saved
-as the whole series, minus cancelled dates. All events are in San Diego time
-(`America/Los_Angeles`); time zones per list or event can come when the app
-covers other cities.
-
-Recurring events store an iCalendar RRULE (`FREQ=WEEKLY;BYDAY=TU`) plus a start
-time in San Diego local time, so times stay put across daylight saving changes.
-The editor offers presets (weekly, every other week, monthly on the Nth weekday)
-and a custom RRULE field. Individual dates can be cancelled.
-
-Neighborhoods and cities roll up into four regions (North County, San Diego
-City, East County, South County); those, and the two categories ("Shake 'n
-Bake" and "Chill"), are fixed lists in `crates/core/src/catalog.rs`. Records
-marked "Countywide / Various" match every region. Tags are free-form, stored
-lowercase, and an event inherits its group's tags and categories.
-
-The schema lives in `crates/core/src/db.rs` as an append-only list of
-migrations; databases are upgraded when the app opens them.
+3. **Export…** it and publish it to the site. Keep its **Update URL** (Lists →
+   Edit) set to the hosted file, so everyone's copy keeps updating from there.
+4. Before a release, copy the hosted file over `data/defaults.json` so new
+   installs start with the latest version.

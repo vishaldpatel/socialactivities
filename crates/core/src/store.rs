@@ -271,6 +271,8 @@ impl Store {
     }
 
     /// Replaces an added list with a newer version, keeping where it came from.
+    /// If the new version doesn't say where its updates are published, the
+    /// update URL already known is kept, so updates keep arriving.
     pub fn update_list(&mut self, file: &ListFile) -> Result<Installed> {
         let list = self.list(&file.id)?;
         if list.owned {
@@ -279,17 +281,10 @@ impl Store {
         if file.updated_at <= list.updated_at {
             return Ok(Installed::Unchanged);
         }
-        self.replace(file, list.source)
-    }
-
-    fn replace(&mut self, file: &ListFile, source: Option<String>) -> Result<Installed> {
         self.check_conflicts(file)?;
-        db::replace_list(
-            &mut self.conn,
-            &file.info(false, source),
-            &file.groups(),
-            &file.events(),
-        )?;
+        let mut info = file.info(false, list.source);
+        info.update_url = info.update_url.or(list.update_url);
+        db::replace_list(&mut self.conn, &info, &file.groups(), &file.events())?;
         Ok(Installed::Replaced)
     }
 
@@ -478,6 +473,26 @@ mod tests {
         assert_eq!(store.install_bundled(&v1).unwrap(), Installed::Unchanged);
         let v2 = published(&source, &list, "2026-10-02T00:00:00Z");
         assert_eq!(store.install_bundled(&v2).unwrap(), Installed::Replaced);
+    }
+
+    #[test]
+    fn updates_keep_the_update_url_when_the_new_version_has_none() {
+        let (source, list, _, _) = store_with_list();
+        let mut store = Store::in_memory().unwrap();
+        let mut v1 = published(&source, &list, "2026-10-01T00:00:00Z");
+        v1.update_url = Some("https://x.org/l.json".into());
+        store.install_bundled(&v1).unwrap();
+        let v2 = published(&source, &list, "2026-10-02T00:00:00Z");
+        assert_eq!(v2.update_url, None);
+        assert_eq!(store.update_list(&v2).unwrap(), Installed::Replaced);
+        let installed = store.list(&list.id).unwrap();
+        assert_eq!(installed.update_location(), Some("https://x.org/l.json"));
+
+        let mut v3 = published(&source, &list, "2026-10-03T00:00:00Z");
+        v3.update_url = Some("https://y.org/l.json".into());
+        store.update_list(&v3).unwrap();
+        let moved = store.list(&list.id).unwrap();
+        assert_eq!(moved.update_url.as_deref(), Some("https://y.org/l.json"));
     }
 
     #[test]

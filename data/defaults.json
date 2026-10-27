@@ -1,17 +1,18 @@
 {
   "format": 1,
-  "id": "sd-social-activities",
-  "name": "San Diego Social Activities",
-  "description": "Curated groups and events that ship with the app.",
-  "updated_at": "2026-10-24T17:38:54.558175876Z",
+  "id": "found-online-run-clubs",
+  "name": "Run Clubs (found online)",
+  "description": "Run clubs collected from sandiegorunningco.com and each club's own pages.",
+  "updated_at": "2026-10-26T23:28:14Z",
+  "update_url": "https://vishaldpatel.github.io/social-group-and-event-lists/SanDiegoCounty/run-clubs.json",
   "groups": [
     {
-      "id": "f43de669-226b-4fae-a196-7bad7f7a9bd9",
-      "name": "Encinitas Run Club",
-      "description": "Run Club in Encinitas featuring runners of all skill levels.",
-      "neighborhood": "encinitas",
-      "address": "Culture Brewing in Downtown Encinitas",
-      "frequency": "Weekly on Tuesdays",
+      "id": "run-november-project-san-diego",
+      "name": "November Project San Diego",
+      "description": "Free, high-energy fitness meetup that mixes running with bodyweight exercises. For everyone, all levels.",
+      "neighborhood": "balboa-park",
+      "address": "Bea Evenson Fountain, Balboa Park",
+      "frequency": "Wednesdays 6:29 AM",
       "cost": {
         "kind": "free"
       },
@@ -19,259 +20,1342 @@
         "active"
       ],
       "tags": [
-        "after-work",
+        "running",
+        "beginner friendly"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/novemberprojectsd/"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/novemberprojectsd"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-seek-beer-run-club",
+      "name": "Seek Beer Run Club",
+      "description": "Seek Beer Co.'s weekly run club: run, then grab a beer. 5K and 10K routes.",
+      "neighborhood": "north-park",
+      "address": "Seek Beer Co., North Park",
+      "frequency": "Every Monday 6:00 PM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "brewery",
+        "social"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/seekbeer_runclub/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-la-jolla-track-club",
+      "name": "La Jolla Track Club",
+      "description": "Weekly track workouts for beginner and intermediate runners. Free to join.",
+      "neighborhood": "university-city",
+      "address": "UCSD Triton Track",
+      "frequency": "Tuesdays 5:30 PM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
         "beginner friendly",
+        "track"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/ljtrackclub/"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/lajollatrackclub"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-la-jolla-run-club",
+      "name": "La Jolla Run Club",
+      "description": "Weekly Tuesday evening group run from the La Jolla Rec Center.",
+      "neighborhood": "la-jolla",
+      "address": "La Jolla Recreation Center",
+      "frequency": "Tuesdays 6:00 PM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
         "running"
       ],
       "links": [
         {
-          "kind": "website",
-          "url": "https://instagram.com/erc"
-        }
-      ],
-      "last_verified": "2026-10-24"
-    },
-    {
-      "id": "example-spanish-exchange",
-      "name": "Example: Hillcrest Spanish Exchange",
-      "description": "Conversation exchange: half the evening in Spanish, half in English.",
-      "neighborhood": "hillcrest",
-      "address": "Hillcrest",
-      "frequency": "Every other Thursday at 6:30 PM",
-      "cost": {
-        "kind": "free"
-      },
-      "categories": [
-        "chill"
-      ],
-      "tags": [],
-      "links": [
+          "kind": "instagram",
+          "url": "https://www.instagram.com/ljrunclub/"
+        },
         {
-          "kind": "website",
-          "url": "https://example.com"
+          "kind": "other",
+          "url": "https://strava.app.link/39NWcOKRILb"
         }
-      ]
-    },
-    {
-      "id": "example-np-board-games",
-      "name": "Example: North Park Board Game Night",
-      "description": "Open board game night. Plenty of games on hand, or bring your own.",
-      "neighborhood": "north-park",
-      "address": "North Park",
-      "frequency": "Every Tuesday at 7:00 PM",
-      "cost": {
-        "kind": "fee",
-        "note": "$5 suggested donation"
-      },
-      "categories": [
-        "chill"
       ],
-      "tags": [],
-      "links": [
-        {
-          "kind": "website",
-          "url": "https://example.com"
-        }
-      ]
+      "last_verified": "2026-10-26"
     },
     {
-      "id": "example-ob-salsa",
-      "name": "Example: OB Salsa Social",
-      "description": "Beginner lesson for the first half hour, then open social dancing.",
-      "neighborhood": "ocean-beach",
-      "address": "Ocean Beach",
-      "frequency": "Every Friday at 8:00 PM",
-      "cost": {
-        "kind": "membership",
-        "note": "$40/year, first visit free"
-      },
-      "categories": [
-        "active"
-      ],
-      "tags": [],
-      "links": [
-        {
-          "kind": "website",
-          "url": "https://example.com"
-        }
-      ]
-    },
-    {
-      "id": "example-pb-volleyball",
-      "name": "Example: PB Sunset Volleyball",
-      "description": "Pickup beach volleyball for all levels. Bring water and sunscreen.",
-      "neighborhood": "pacific-beach",
-      "address": "Pacific Beach, near Crystal Pier",
-      "frequency": "Every Saturday at 4:00 PM",
+      "id": "run-tuesdays-waterfront-run",
+      "name": "Tuesday's Waterfront Run",
+      "description": "Scenic 3-5 mile run along the downtown San Diego waterfront. Come one, come all.",
+      "neighborhood": "little-italy",
+      "address": "Waterfront Park",
+      "frequency": "Every Tuesday 6:00 PM",
       "cost": {
         "kind": "free"
       },
       "categories": [
         "active"
       ],
-      "tags": [],
+      "tags": [
+        "running"
+      ],
       "links": [
         {
-          "kind": "website",
-          "url": "https://example.com"
+          "kind": "instagram",
+          "url": "https://www.instagram.com/tuesdayswaterfrontrun/"
         }
-      ]
+      ],
+      "last_verified": "2026-10-26"
     },
     {
-      "id": "example-sunrise-hikers",
-      "name": "Example: Sunrise Hiking Crew",
-      "description": "Moderate morning hikes around the county, followed by coffee.",
+      "id": "run-front-runners-and-walkers-san-diego",
+      "name": "Front Runners and Walkers San Diego",
+      "description": "Invites all members of the community to run or walk together in a supportive, friendly environment.",
+      "neighborhood": "balboa-park",
+      "address": "Balboa Park near 6th Ave and Laurel St",
+      "frequency": "Tuesdays and Thursdays 6:00 PM, Saturdays 8:00 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "walking"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/f_r_w_s_d/"
+        },
+        {
+          "kind": "website",
+          "url": "https://frwsd.org/"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/frwsd"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-san-diego-reluctant-runners",
+      "name": "San Diego Reluctant Runners",
+      "description": "No-pressure 5Ks around San Diego, a weekly excuse to connect and move. All paces welcome.",
       "neighborhood": "countywide",
-      "address": "Trailhead varies; posted a week ahead",
-      "frequency": "2nd Saturday of the month at 6:30 AM",
+      "address": "",
+      "frequency": "Wednesdays 5:45 PM, some weekend days",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "beginner friendly",
+        "social"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/sdreluctantrunners/"
+        },
+        {
+          "kind": "meetup",
+          "url": "https://www.meetup.com/San-Diego-Reluctant-Runners"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-milestone-hump-day-run-club-north-park",
+      "name": "Milestone Running Hump Day Run Club (North Park)",
+      "description": "Milestone Running Shop's free Wednesday night run from the North Park store, with 3 and 5 mile routes.",
+      "neighborhood": "north-park",
+      "address": "2545 El Cajon Blvd Unit D, San Diego, CA 92104",
+      "frequency": "Wednesdays 6:00 PM",
       "cost": {
         "kind": "free"
       },
       "categories": [
         "active"
       ],
-      "tags": [],
+      "tags": [
+        "running"
+      ],
       "links": [
         {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/milestonerunning/"
+        },
+        {
           "kind": "website",
-          "url": "https://example.com"
+          "url": "https://milestonerunning.com/content/community"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/milestonerunning"
         }
-      ]
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-milestone-monday-run-club-pacific-beach",
+      "name": "Milestone Running Monday Run Club (Pacific Beach)",
+      "description": "Free Monday night run of 3-6 miles from Milestone's PB store. All levels welcome, and you don't have to run the whole route.",
+      "neighborhood": "pacific-beach",
+      "address": "1892 Garnet Ave, San Diego, CA 92109",
+      "frequency": "Mondays 6:00 PM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "beginner friendly"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/milestonerunning/"
+        },
+        {
+          "kind": "website",
+          "url": "https://milestonerunning.com/content/community"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-fleet-feet-san-diego",
+      "name": "Fleet Feet San Diego Wednesday Fun Run",
+      "description": "Weekly Wednesday evening fun run on easy routes from the Fleet Feet store. Paid race-training programs are also offered.",
+      "neighborhood": "del-mar",
+      "address": "5980 Village Way, San Diego, CA 92130",
+      "frequency": "Every Wednesday 6:15 PM",
+      "cost": {
+        "kind": "free",
+        "note": "Weekly fun run is free; training programs are paid (e.g. $125)"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/fleetfeetsandiego/"
+        },
+        {
+          "kind": "website",
+          "url": "https://www.fleetfeet.com/s/sandiego/training"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/fleetfeetsandiego"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-i-hate-trail-running-run-club",
+      "name": "I Hate Trail Running Run Club",
+      "description": "A trail run club started by a road runner who hates trails, running road/trail hybrid routes.",
+      "neighborhood": "countywide",
+      "address": "",
+      "frequency": "Every Wednesday",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "trail",
+        "social"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/ihatetrailrunningrc/"
+        },
+        {
+          "kind": "other",
+          "url": "https://docs.google.com/forms/d/1gJm3CzgCkZeMlVyikWqds09UGNnk5rANYGcuV790dcw/viewform"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-santa-mujeres-run-club",
+      "name": "Santa Mujeres Run Club",
+      "description": "Nonprofit run club led by Mujeres: a safe space for women of color to grow and get active together. Weekly 1 mile and 5K runs.",
+      "neighborhood": "countywide",
+      "address": "Balboa Park (San Diego) and Oceanside",
+      "frequency": "Thursdays 6:00 PM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "women only"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/santamujeresrc/"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/SantaMujeresRC"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-black-girls-run-san-diego",
+      "name": "Black Girls RUN! San Diego",
+      "description": "The official San Diego Black Girls RUN! group. Runs are organized in their private Facebook group.",
+      "neighborhood": "countywide",
+      "address": "",
+      "frequency": "Multiple times a week",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "women only"
+      ],
+      "links": [
+        {
+          "kind": "facebook",
+          "url": "https://www.facebook.com/groups/BlackGirlsRUNSanDiego"
+        },
+        {
+          "kind": "website",
+          "url": "https://blackgirlsrun.com/community/san-diego-ca/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-san-diego-track-club",
+      "name": "San Diego Track Club",
+      "description": "Nonprofit running community for all paces and goals, with coached Tuesday and Thursday workouts and 5K, half and full marathon training programs.",
+      "neighborhood": "countywide",
+      "address": "",
+      "frequency": "Tuesdays and Thursdays (coached workouts)",
+      "cost": {
+        "kind": "membership"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "track"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/sandiegotrackclub/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-black-men-run-san-diego",
+      "name": "Black Men Run San Diego",
+      "description": "San Diego chapter of Black Men Run, promoting a healthy brotherhood through running.",
+      "neighborhood": "point-loma",
+      "address": "Liberty Station",
+      "frequency": "Thursdays 6:00 PM, Saturdays 7:15 AM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/blackmenrunsd/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-baddies-run-club",
+      "name": "Baddies Run Club",
+      "description": "San Diego community run club meeting at Liberty Station, Coronado and other spots.",
+      "neighborhood": "countywide",
+      "address": "Liberty Station, Coronado, other locations",
+      "frequency": "Thursdays 6:00 PM, Saturdays 8:00 AM, Sundays 7:00 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/baddiesrun_sd/"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/Baddiesrun_sd"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-body-art-run-club",
+      "name": "Body Art Run Club (BARC)",
+      "description": "Community, connection and culture run club active in 13+ cities, including a San Diego run at Mission Bay.",
+      "neighborhood": "mission-bay",
+      "address": "Super Bloom Cafe, Mission Bay",
+      "frequency": "Mondays 6:30 PM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "social"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/bodyartrunclub/"
+        },
+        {
+          "kind": "other",
+          "url": "https://www.heylo.com/org/975d7cbb-1167-47d8-a30a-bc6649f8ace6"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-ocean-beach-run-club",
+      "name": "Ocean Beach Run Club",
+      "description": "Ocean Beach runs of 4-6 miles. All are welcome.",
+      "neighborhood": "ocean-beach",
+      "address": "Tue: 4700 Saratoga Ave, San Diego 92107; Thu: Sinewave Cafe",
+      "frequency": "Tuesdays 6:04 PM, Thursdays 7:00 AM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/obrunclub/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-pacific-beach-run-club",
+      "name": "Pacific Beach Run Club (PBRC)",
+      "description": "A social club that likes to run: a 5K loop run accordion-style with regroup stops, so nobody gets dropped. No fees, no sign-up, just show up.",
+      "neighborhood": "pacific-beach",
+      "address": "1376 Felspar St, San Diego",
+      "frequency": "Wednesdays 6:00 PM, Saturdays 8:30 AM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "social",
+        "beginner friendly",
+        "coffee"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/pbrunclub/"
+        },
+        {
+          "kind": "website",
+          "url": "https://www.pbrunclub.com/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-coastal-run-club",
+      "name": "Coastal Run Club",
+      "description": "Running community in Leucadia, Encinitas and Cardiff.",
+      "neighborhood": "encinitas",
+      "address": "Leucadia / Encinitas / Cardiff",
+      "frequency": "Wednesdays 6:00 PM, Fridays 6:30 AM, Sundays 8:00 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/coastal.runclub/"
+        },
+        {
+          "kind": "website",
+          "url": "https://www.coastalrunclub.co/"
+        },
+        {
+          "kind": "other",
+          "url": "https://forms.gle/9DDHgCJt27t8AM2G8"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-san-diego-trail-runners",
+      "name": "San Diego Trail Runners",
+      "description": "San Diego running community with Mission Trails as its home base.",
+      "neighborhood": "santee",
+      "address": "Mission Trails Regional Park",
+      "frequency": "Mon 6:00 AM, Wed 5:00 AM, Thu 5:30 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "trail"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/sdtrailrunners/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-nobody-cares-run-club",
+      "name": "Nobody Cares Run Club (NCRC)",
+      "description": "North County San Diego run club that's not about speed or perfection, just showing up and moving forward. Includes a ladies-only Monday run.",
+      "neighborhood": "escondido",
+      "address": "Kit Carson Park (Arroyo De Oro Children's Play Area), Escondido; Lake Hodges",
+      "frequency": "Mon 6:00 PM (Lake Hodges; ladies-only run at Kit Carson Park), Wed 6:00 PM, Fri 5:20 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/nobodycaresrunclub/"
+        },
+        {
+          "kind": "website",
+          "url": "https://www.nobodycaresrunclub.com/"
+        },
+        {
+          "kind": "other",
+          "url": "https://linktr.ee/nobodycaresrunclub"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-encinitas-run-club",
+      "name": "Encinitas Run Club",
+      "description": "Tuesday evening runs of 3.75 or 5 miles from Culture Brewing and Saturday morning runs of 4/6/8 miles from Necessity Coffee.",
+      "neighborhood": "encinitas",
+      "address": "Tue: Culture Brewing Co.; Sat: Necessity Coffee",
+      "frequency": "Tuesdays 6:00 PM, Saturdays 8:00 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "brewery",
+        "coffee"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/encinitasrunclub/"
+        },
+        {
+          "kind": "other",
+          "url": "https://strava.com/clubs/encinitasrunclub"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-south-o-run-club",
+      "name": "South O Run Club",
+      "description": "Coastal South Oceanside runs, usually 2/4/6 or 3/5/7 mile routes at your own pace, starting together and warming up and cooling down at South O Brewing. Rain or shine.",
+      "neighborhood": "oceanside",
+      "address": "South O Brewing, 1575 S Coast Hwy, Oceanside, CA 92054",
+      "frequency": "Wednesdays 5:00 PM, Saturdays 10:00 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "brewery"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/southorunclub/"
+        },
+        {
+          "kind": "website",
+          "url": "https://www.sorunclub.com/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-pacific-coast-run-club",
+      "name": "Pacific Coast Run Club",
+      "description": "Three miles along the Oceanside coast. All are welcome.",
+      "neighborhood": "oceanside",
+      "address": "Buccaneer Park, Oceanside",
+      "frequency": "Wednesdays 6:30 PM, Saturdays 7:00 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "beginner friendly"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/pcrc.oside/"
+        },
+        {
+          "kind": "other",
+          "url": "https://strava.app.link/OZQVxvYzLJb"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-ultrabuds",
+      "name": "Ultrabuds Run Club",
+      "description": "Ultra and trail runners \"with a hops and grapes issue\". Free Saturday trail runs, usually in North County.",
+      "neighborhood": "countywide",
+      "address": "North County trails (varies)",
+      "frequency": "Saturdays 6:30 AM",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "trail"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/ultrabuds/"
+        },
+        {
+          "kind": "facebook",
+          "url": "https://www.facebook.com/groups/ultrabudsrunning/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-run-north-county",
+      "name": "Run North County",
+      "description": "Nonprofit hub that connects runners and promotes group runs across North County San Diego.",
+      "neighborhood": "countywide",
+      "address": "Various in North County",
+      "frequency": "Multiple times weekly",
+      "cost": {
+        "kind": "free"
+      },
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/run_north_county/"
+        },
+        {
+          "kind": "website",
+          "url": "http://www.runnorthcounty.com/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-run-dirty-club",
+      "name": "Run Dirty Running Club",
+      "description": "Saturday morning community run in Chula Vista.",
+      "neighborhood": "chula-vista",
+      "address": "Sunridge Park, Chula Vista",
+      "frequency": "Saturdays 7:00 AM",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/rundirtyclub/"
+        }
+      ],
+      "last_verified": "2026-10-26"
+    },
+    {
+      "id": "run-triton-ruck-club-san-diego",
+      "name": "Triton Ruck Club - San Diego",
+      "description": "All-levels ruck club with weekday sessions plus rucks, workouts and challenges every weekend, from 5K to 50 miles.",
+      "neighborhood": "countywide",
+      "address": "",
+      "frequency": "Varies during the week; every weekend",
+      "categories": [
+        "active"
+      ],
+      "tags": [
+        "running",
+        "rucking"
+      ],
+      "links": [
+        {
+          "kind": "instagram",
+          "url": "https://www.instagram.com/tritonruckclub/"
+        },
+        {
+          "kind": "other",
+          "url": "https://campsite.bio/tritonruckclub"
+        }
+      ],
+      "last_verified": "2026-10-26"
     }
   ],
   "events": [
     {
-      "id": "example-pb-volleyball-event",
-      "group_id": "example-pb-volleyball",
-      "title": "Saturday pickup games",
+      "id": "run-november-project-san-diego-we",
+      "group_id": "run-november-project-san-diego",
+      "title": "November Project: Wednesday Morning Run",
       "description": "",
-      "neighborhood": "pacific-beach",
-      "location": "Pacific Beach, near Crystal Pier",
-      "start": "2026-10-03T16:00:00",
-      "duration_minutes": 150,
+      "neighborhood": "balboa-park",
+      "location": "Bea Evenson Fountain, Balboa Park",
+      "start": "2026-10-28T06:29:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-seek-beer-run-club-mo",
+      "group_id": "run-seek-beer-run-club",
+      "title": "Seek Beer Run Club: Monday Evening Run",
+      "description": "",
+      "neighborhood": "north-park",
+      "location": "Seek Beer Co., North Park",
+      "start": "2026-10-26T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-la-jolla-track-club-tu",
+      "group_id": "run-la-jolla-track-club",
+      "title": "La Jolla Track Club: Tuesday Evening Run",
+      "description": "",
+      "neighborhood": "university-city",
+      "location": "UCSD Triton Track",
+      "start": "2026-10-27T17:30:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-la-jolla-run-club-tu",
+      "group_id": "run-la-jolla-run-club",
+      "title": "La Jolla Run Club: Tuesday Evening Run",
+      "description": "",
+      "neighborhood": "la-jolla",
+      "location": "La Jolla Recreation Center",
+      "start": "2026-10-27T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-tuesdays-waterfront-run-tu",
+      "group_id": "run-tuesdays-waterfront-run",
+      "title": "Tuesday's Waterfront Run",
+      "description": "",
+      "neighborhood": "little-italy",
+      "location": "Waterfront Park",
+      "start": "2026-10-27T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-front-runners-and-walkers-san-diego-tu",
+      "group_id": "run-front-runners-and-walkers-san-diego",
+      "title": "Front Runners and Walkers: Tuesday Evening Run",
+      "description": "",
+      "neighborhood": "balboa-park",
+      "location": "Balboa Park near 6th Ave and Laurel St",
+      "start": "2026-10-27T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-front-runners-and-walkers-san-diego-th",
+      "group_id": "run-front-runners-and-walkers-san-diego",
+      "title": "Front Runners and Walkers: Thursday Evening Run",
+      "description": "",
+      "neighborhood": "balboa-park",
+      "location": "Balboa Park near 6th Ave and Laurel St",
+      "start": "2026-10-29T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TH",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-front-runners-and-walkers-san-diego-sa",
+      "group_id": "run-front-runners-and-walkers-san-diego",
+      "title": "Front Runners and Walkers: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "balboa-park",
+      "location": "Balboa Park near 6th Ave and Laurel St",
+      "start": "2026-10-31T08:00:00",
+      "duration_minutes": 60,
       "rrule": "FREQ=WEEKLY;BYDAY=SA",
       "cost": {
         "kind": "free"
-      },
-      "categories": [],
-      "tags": []
+      }
     },
     {
-      "id": "example-np-board-games-event",
-      "group_id": "example-np-board-games",
-      "title": "Tuesday game night",
+      "id": "run-san-diego-reluctant-runners-we",
+      "group_id": "run-san-diego-reluctant-runners",
+      "title": "Reluctant Runners: Wednesday Evening Run",
+      "description": "",
+      "neighborhood": "countywide",
+      "location": "",
+      "start": "2026-10-28T17:45:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-milestone-hump-day-run-club-north-park-we",
+      "group_id": "run-milestone-hump-day-run-club-north-park",
+      "title": "Milestone Hump Day Run",
       "description": "",
       "neighborhood": "north-park",
-      "location": "North Park",
-      "start": "2026-10-06T19:00:00",
-      "duration_minutes": 180,
-      "rrule": "FREQ=WEEKLY;BYDAY=TU",
-      "cost": {
-        "kind": "fee",
-        "note": "$5 suggested donation"
-      },
-      "categories": [],
-      "tags": []
-    },
-    {
-      "id": "example-spanish-exchange-event",
-      "group_id": "example-spanish-exchange",
-      "title": "Conversation exchange",
-      "description": "",
-      "neighborhood": "hillcrest",
-      "location": "Hillcrest",
-      "start": "2026-10-08T18:30:00",
-      "duration_minutes": 120,
-      "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TH",
+      "location": "2545 El Cajon Blvd Unit D, San Diego, CA 92104",
+      "start": "2026-10-28T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
       "cost": {
         "kind": "free"
-      },
-      "categories": [],
-      "tags": []
+      }
     },
     {
-      "id": "example-ob-salsa-event",
-      "group_id": "example-ob-salsa",
-      "title": "Friday salsa social",
+      "id": "run-milestone-monday-run-club-pacific-beach-mo",
+      "group_id": "run-milestone-monday-run-club-pacific-beach",
+      "title": "Milestone Monday Run",
+      "description": "",
+      "neighborhood": "pacific-beach",
+      "location": "1892 Garnet Ave, San Diego, CA 92109",
+      "start": "2026-10-26T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-fleet-feet-san-diego-we",
+      "group_id": "run-fleet-feet-san-diego",
+      "title": "Fleet Feet Wednesday Fun Run",
+      "description": "",
+      "neighborhood": "del-mar",
+      "location": "5980 Village Way, San Diego, CA 92130",
+      "start": "2026-10-28T18:15:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free",
+        "note": "Weekly fun run is free; training programs are paid (e.g. $125)"
+      }
+    },
+    {
+      "id": "run-santa-mujeres-run-club-th",
+      "group_id": "run-santa-mujeres-run-club",
+      "title": "Santa Mujeres Run Club: Thursday Evening Run",
+      "description": "",
+      "neighborhood": "countywide",
+      "location": "Balboa Park or Oceanside (check their Instagram)",
+      "start": "2026-10-29T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TH",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-black-men-run-san-diego-th",
+      "group_id": "run-black-men-run-san-diego",
+      "title": "Black Men Run: Thursday Evening Run",
+      "description": "",
+      "neighborhood": "point-loma",
+      "location": "Liberty Station",
+      "start": "2026-10-29T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TH",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-black-men-run-san-diego-sa",
+      "group_id": "run-black-men-run-san-diego",
+      "title": "Black Men Run: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "point-loma",
+      "location": "Liberty Station",
+      "start": "2026-10-31T07:15:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-baddies-run-club-th",
+      "group_id": "run-baddies-run-club",
+      "title": "Baddies Run Club: Thursday Evening Run",
+      "description": "",
+      "neighborhood": "countywide",
+      "location": "Varies: Liberty Station, Coronado and others",
+      "start": "2026-10-29T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TH",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-baddies-run-club-sa",
+      "group_id": "run-baddies-run-club",
+      "title": "Baddies Run Club: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "countywide",
+      "location": "Varies: Liberty Station, Coronado and others",
+      "start": "2026-10-31T08:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-baddies-run-club-su",
+      "group_id": "run-baddies-run-club",
+      "title": "Baddies Run Club: Sunday Morning Run",
+      "description": "",
+      "neighborhood": "countywide",
+      "location": "Varies: Liberty Station, Coronado and others",
+      "start": "2026-11-01T07:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SU",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-body-art-run-club-mo",
+      "group_id": "run-body-art-run-club",
+      "title": "Body Art Run Club: Monday Evening Run",
+      "description": "",
+      "neighborhood": "mission-bay",
+      "location": "Super Bloom Cafe, Mission Bay",
+      "start": "2026-10-26T18:30:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-ocean-beach-run-club-tu",
+      "group_id": "run-ocean-beach-run-club",
+      "title": "Ocean Beach Run Club: Tuesday Evening Run",
       "description": "",
       "neighborhood": "ocean-beach",
-      "location": "Ocean Beach",
-      "start": "2026-10-09T20:00:00",
-      "duration_minutes": 180,
-      "rrule": "FREQ=WEEKLY;BYDAY=FR",
-      "cost": {
-        "kind": "membership",
-        "note": "$40/year, first visit free"
-      },
-      "categories": [],
-      "tags": []
-    },
-    {
-      "id": "example-sunrise-hikers-event",
-      "group_id": "example-sunrise-hikers",
-      "title": "Monthly sunrise hike",
-      "description": "",
-      "neighborhood": "countywide",
-      "location": "Trailhead varies; posted a week ahead",
-      "start": "2026-10-10T06:30:00",
-      "duration_minutes": 180,
-      "rrule": "FREQ=MONTHLY;BYDAY=2SA",
-      "cost": {
-        "kind": "free"
-      },
-      "categories": [],
-      "tags": []
-    },
-    {
-      "id": "394f29f7-5e29-4cf1-8d23-db9f2e7a06cb",
-      "group_id": "f43de669-226b-4fae-a196-7bad7f7a9bd9",
-      "title": "Tuesday Evening Run at Culture Brewing",
-      "description": "",
-      "neighborhood": "encinitas",
-      "location": "Culture Brewing in Downtown Encinitas",
-      "start": "2026-10-27T18:00:00",
-      "duration_minutes": 120,
+      "location": "4700 Saratoga Ave, San Diego 92107",
+      "start": "2026-10-27T18:04:00",
+      "duration_minutes": 60,
       "rrule": "FREQ=WEEKLY;BYDAY=TU",
       "cost": {
         "kind": "free"
-      },
-      "categories": [
-        "active"
-      ],
-      "tags": []
+      }
     },
     {
-      "id": "big-bay-boom-2027",
-      "title": "Big Bay Boom (4th of July fireworks)",
-      "description": "Fireworks over San Diego Bay. Arrive early for a spot on the waterfront.",
-      "neighborhood": "downtown",
-      "location": "San Diego Bay waterfront",
-      "start": "2027-07-04T21:00:00",
-      "duration_minutes": 30,
+      "id": "run-ocean-beach-run-club-th",
+      "group_id": "run-ocean-beach-run-club",
+      "title": "Ocean Beach Run Club: Thursday Morning Run",
+      "description": "",
+      "neighborhood": "ocean-beach",
+      "location": "Sinewave Cafe",
+      "start": "2026-10-29T07:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TH",
       "cost": {
         "kind": "free"
-      },
-      "url": "https://bigbayboom.com",
-      "categories": [
-        "chill"
-      ],
-      "tags": []
+      }
     },
     {
-      "id": "perseids-2027",
-      "title": "Perseid meteor shower peak",
-      "description": "Head east to Anza-Borrego or the Laguna Mountains for dark skies. Best after midnight.",
+      "id": "run-pacific-beach-run-club-we",
+      "group_id": "run-pacific-beach-run-club",
+      "title": "Pacific Beach Run Club: Wednesday Evening Run",
+      "description": "",
+      "neighborhood": "pacific-beach",
+      "location": "1376 Felspar St, San Diego",
+      "start": "2026-10-28T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-pacific-beach-run-club-sa",
+      "group_id": "run-pacific-beach-run-club",
+      "title": "Pacific Beach Run Club: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "pacific-beach",
+      "location": "1376 Felspar St, San Diego",
+      "start": "2026-10-31T08:30:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-san-diego-trail-runners-mo",
+      "group_id": "run-san-diego-trail-runners",
+      "title": "San Diego Trail Runners: Monday Morning Run",
+      "description": "",
+      "neighborhood": "santee",
+      "location": "Mission Trails Regional Park",
+      "start": "2026-10-26T06:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-san-diego-trail-runners-we",
+      "group_id": "run-san-diego-trail-runners",
+      "title": "San Diego Trail Runners: Wednesday Morning Run",
+      "description": "",
+      "neighborhood": "santee",
+      "location": "Mission Trails Regional Park",
+      "start": "2026-10-28T05:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-san-diego-trail-runners-th",
+      "group_id": "run-san-diego-trail-runners",
+      "title": "San Diego Trail Runners: Thursday Morning Run",
+      "description": "",
+      "neighborhood": "santee",
+      "location": "Mission Trails Regional Park",
+      "start": "2026-10-29T05:30:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TH",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-nobody-cares-run-club-mo",
+      "group_id": "run-nobody-cares-run-club",
+      "title": "Nobody Cares Run Club: Monday Evening Run",
+      "description": "A ladies-only run meets at Kit Carson Park at the same time.",
+      "neighborhood": "escondido",
+      "location": "Lake Hodges",
+      "start": "2026-10-26T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=MO",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-nobody-cares-run-club-we",
+      "group_id": "run-nobody-cares-run-club",
+      "title": "Nobody Cares Run Club: Wednesday Evening Run",
+      "description": "",
+      "neighborhood": "escondido",
+      "location": "",
+      "start": "2026-10-28T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-nobody-cares-run-club-fr",
+      "group_id": "run-nobody-cares-run-club",
+      "title": "Nobody Cares Run Club: Friday Morning Run",
+      "description": "",
+      "neighborhood": "escondido",
+      "location": "",
+      "start": "2026-10-30T05:20:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=FR",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-coastal-run-club-we",
+      "group_id": "run-coastal-run-club",
+      "title": "Coastal Run Club: Wednesday Evening Run",
+      "description": "",
+      "neighborhood": "encinitas",
+      "location": "Leucadia / Encinitas / Cardiff",
+      "start": "2026-10-28T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-coastal-run-club-fr",
+      "group_id": "run-coastal-run-club",
+      "title": "Coastal Run Club: Friday Morning Run",
+      "description": "",
+      "neighborhood": "encinitas",
+      "location": "Leucadia / Encinitas / Cardiff",
+      "start": "2026-10-30T06:30:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=FR",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-coastal-run-club-su",
+      "group_id": "run-coastal-run-club",
+      "title": "Coastal Run Club: Sunday Morning Run",
+      "description": "",
+      "neighborhood": "encinitas",
+      "location": "Leucadia / Encinitas / Cardiff",
+      "start": "2026-11-01T08:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SU",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-encinitas-run-club-tu",
+      "group_id": "run-encinitas-run-club",
+      "title": "Encinitas Run Club: Tuesday Evening Run",
+      "description": "",
+      "neighborhood": "encinitas",
+      "location": "Culture Brewing Co.",
+      "start": "2026-10-27T18:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=TU",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-encinitas-run-club-sa",
+      "group_id": "run-encinitas-run-club",
+      "title": "Encinitas Run Club: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "encinitas",
+      "location": "Necessity Coffee",
+      "start": "2026-10-31T08:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-south-o-run-club-we",
+      "group_id": "run-south-o-run-club",
+      "title": "South O Run Club: Wednesday Evening Run",
+      "description": "",
+      "neighborhood": "oceanside",
+      "location": "South O Brewing, 1575 S Coast Hwy, Oceanside, CA 92054",
+      "start": "2026-10-28T17:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-south-o-run-club-sa",
+      "group_id": "run-south-o-run-club",
+      "title": "South O Run Club: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "oceanside",
+      "location": "South O Brewing, 1575 S Coast Hwy, Oceanside, CA 92054",
+      "start": "2026-10-31T10:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-pacific-coast-run-club-we",
+      "group_id": "run-pacific-coast-run-club",
+      "title": "Pacific Coast Run Club: Wednesday Evening Run",
+      "description": "",
+      "neighborhood": "oceanside",
+      "location": "Buccaneer Park, Oceanside",
+      "start": "2026-10-28T18:30:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=WE",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-pacific-coast-run-club-sa",
+      "group_id": "run-pacific-coast-run-club",
+      "title": "Pacific Coast Run Club: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "oceanside",
+      "location": "Buccaneer Park, Oceanside",
+      "start": "2026-10-31T07:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      }
+    },
+    {
+      "id": "run-ultrabuds-sa",
+      "group_id": "run-ultrabuds",
+      "title": "Ultrabuds: Saturday Morning Run",
+      "description": "",
       "neighborhood": "countywide",
-      "location": "Anywhere dark, away from city lights",
-      "start": "2027-08-12T22:00:00",
-      "duration_minutes": 360,
+      "location": "North County trails (varies)",
+      "start": "2026-10-31T06:30:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
       "cost": {
         "kind": "free"
-      },
-      "categories": [
-        "chill"
-      ],
-      "tags": []
+      }
+    },
+    {
+      "id": "run-run-dirty-club-sa",
+      "group_id": "run-run-dirty-club",
+      "title": "Run Dirty: Saturday Morning Run",
+      "description": "",
+      "neighborhood": "chula-vista",
+      "location": "Sunridge Park, Chula Vista",
+      "start": "2026-10-31T07:00:00",
+      "duration_minutes": 60,
+      "rrule": "FREQ=WEEKLY;BYDAY=SA",
+      "cost": {
+        "kind": "free"
+      }
     }
   ]
 }
