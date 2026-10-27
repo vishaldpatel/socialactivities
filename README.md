@@ -6,12 +6,12 @@ dancing), as opposed to watching.
 
 Built with Rust, [Iced](https://iced.rs) 0.14 and SQLite.
 
-The app starts with one list, San Diego run clubs. **Find more lists**, such
-as game nights, group classes and cars & coffee meetups, at
-[vishaldpatel.github.io/social-group-and-event-lists](https://vishaldpatel.github.io/social-group-and-event-lists/)
-(San Diego County lists are under San Diego). Copy a list's link and paste it
-into Lists → Add from URL, or download it and add the file. Made a list of
-your own? Export it and share it there.
+The app starts with the lists published at
+[vishaldpatel.github.io/social-group-and-event-lists](https://vishaldpatel.github.io/social-group-and-event-lists/):
+run clubs, game nights, group classes, cars & coffee meetups and more. Some
+start out turned off; switch them on in Lists. To add a list from anywhere
+else, paste its link into Lists → Add from URL, or download it and add the
+file. Made a list of your own? Export it and share it there.
 
 ## Running
 
@@ -47,6 +47,10 @@ focus yet, so Tab skips them.
 Weeks start on Monday. Each event's time sits on a sky color for its start
 time (night navy, dawn purple, daytime blue, afternoon gold, sunset orange);
 the colors are in `crates/app/src/sky.rs`.
+
+Tags that wouldn't match anything in the panel you're on, given your other
+filters, are grayed out. You can still select them, then change other filters
+to see what turns up.
 
 Your filters (area, categories, tags) and the Events panel's grouping and
 range are remembered between runs, in your database. The search text isn't.
@@ -85,6 +89,16 @@ database in the platform data dir (e.g.
   "Check for Updates" gets changes between releases. (The earlier built-in
   list, "San Diego Social Activities", is removed on launch unless you
   maintain it.)
+- **The lists catalog** at
+  [`index.json`](https://vishaldpatel.github.io/social-group-and-event-lists/index.json)
+  is checked on every launch. Any list in it that you don't have, and haven't
+  removed, is added read-only and updates from its URL. An entry with
+  `"default_on": false` is added turned off. That's only on the first launch
+  that reaches the catalog: lists that show up in it later are always added
+  turned off, with a message saying which. Lists you already have are left
+  as they are, and if the catalog can't be reached the app carries on and
+  tries again next launch. Run clubs are also built in, so a first launch
+  offline still has something to show.
 - **Turning a list off** (the On/Off switch on its card) hides its groups and events
   from the Events and Groups panels, its tags from the tag filter, and its
   groups from the event editor's group picker. Nothing is deleted, and the

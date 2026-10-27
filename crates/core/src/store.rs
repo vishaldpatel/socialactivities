@@ -312,6 +312,34 @@ impl Store {
         }
     }
 
+    /// Whether a list from a catalog should be added: it isn't installed, and
+    /// you haven't removed it before.
+    pub fn wants(&self, id: &str) -> Result<bool> {
+        match self.list(id) {
+            Ok(_) => Ok(false),
+            Err(StoreError::NoSuchList) => Ok(!db::was_removed(&self.conn, id)?),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Adds a list from a catalog, read-only and updating from `url`, unless
+    /// it isn't [wanted](Self::wants). `on` is whether it starts out on.
+    pub fn install_from_index(
+        &mut self,
+        file: &ListFile,
+        url: &str,
+        on: bool,
+    ) -> Result<Installed> {
+        if !self.wants(&file.id)? {
+            return Ok(Installed::Unchanged);
+        }
+        let installed = self.add_list(file, Some(url.to_string()), false)?;
+        if !on {
+            self.set_list_on(&file.id, false)?;
+        }
+        Ok(installed)
+    }
+
     /// Lists turned off, by id. Their groups and events stay in the database,
     /// and keep updating, but aren't shown.
     pub fn lists_off(&self) -> Result<HashSet<String>> {
@@ -512,6 +540,38 @@ mod tests {
         store.update_list(&v3).unwrap();
         let moved = store.list(&list.id).unwrap();
         assert_eq!(moved.update_url.as_deref(), Some("https://y.org/l.json"));
+    }
+
+    #[test]
+    fn catalog_lists_install_once_and_stay_removed() {
+        let (source, list, _, _) = store_with_list();
+        let file = published(&source, &list, "2026-10-01T00:00:00Z");
+        let url = "https://x.org/l.json";
+        let mut store = Store::in_memory().unwrap();
+        assert_eq!(
+            store.install_from_index(&file, url, false).unwrap(),
+            Installed::Added
+        );
+        let installed = store.list(&list.id).unwrap();
+        assert!(!installed.owned);
+        assert_eq!(installed.update_location(), Some(url));
+        assert!(store.lists_off().unwrap().contains(&list.id));
+
+        // Already there: left alone, including being turned back on.
+        store.set_list_on(&list.id, true).unwrap();
+        assert_eq!(
+            store.install_from_index(&file, url, false).unwrap(),
+            Installed::Unchanged
+        );
+        assert!(store.lists_off().unwrap().is_empty());
+
+        store.remove_list(&list.id).unwrap();
+        assert!(!store.wants(&list.id).unwrap());
+        assert_eq!(
+            store.install_from_index(&file, url, true).unwrap(),
+            Installed::Unchanged
+        );
+        assert!(store.list(&list.id).is_err());
     }
 
     #[test]

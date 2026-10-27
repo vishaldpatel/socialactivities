@@ -1,1 +1,0 @@
-iLet's not support "Make a Copy" at the list level. When the user selects a group for an event, set the event's timezone to the list that it came from, but let them change it for the event if they want to.

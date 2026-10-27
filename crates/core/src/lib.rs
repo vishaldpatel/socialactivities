@@ -8,7 +8,7 @@ pub mod model;
 pub mod recurrence;
 pub mod store;
 
-pub use listfile::ListFile;
+pub use listfile::{IndexEntry, ListFile, ListIndex};
 pub use model::{Cost, CostKind, Event, Group, Link, ListInfo, Occurrence};
 pub use store::Store;
 

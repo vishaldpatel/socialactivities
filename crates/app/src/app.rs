@@ -1,13 +1,15 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::time::Duration;
 
 use chrono::{NaiveTime, TimeDelta};
+use iced::time::Instant;
 use iced::widget::operation;
 use iced::widget::{button, column, row, rule, scrollable, space, text_input};
-use iced::{Element, Fill, Subscription, Task, keyboard};
+use iced::{Animation, Element, Fill, Subscription, Task, keyboard, window};
 use sdsa_core::catalog::CATEGORIES;
 use sdsa_core::recurrence;
 use sdsa_core::store::Installed;
-use sdsa_core::{Event, Group, ListFile, ListInfo, Occurrence, Store};
+use sdsa_core::{Event, Group, IndexEntry, ListFile, ListIndex, ListInfo, Occurrence, Store};
 
 use crate::form::{self, Editor, Record};
 use crate::lists::{self, Lists, UpdateState};
@@ -21,6 +23,13 @@ pub const MAIN_SCROLL: &str = "main-scroll";
 pub const SEARCH_INPUT: &str = "search";
 /// The first button of each panel on the right, for Ctrl+R.
 pub const RESULTS_START: &str = "results-start";
+
+/// Setting saying the lists catalog has been read before, so lists that
+/// appear in it later start off.
+const INDEX_READ: &str = "index_read";
+
+/// How long a tag takes to fade to or from gray.
+const TAG_FADE: Duration = Duration::from_millis(250);
 
 /// How far the arrow keys and Page Up/Down scroll the panel on the right.
 const LINE_SCROLL: f32 = 48.0;
@@ -184,6 +193,16 @@ pub enum Message {
     Key(keyboard::Key, keyboard::Modifiers),
     /// Scrolls the panel on the right by this much (negative is up).
     Scroll(f32),
+    /// A frame is being drawn while tags fade.
+    Frame,
+    /// The catalog of published lists, downloaded on launch.
+    IndexFetched(Result<String, String>),
+    /// The catalog's lists that aren't installed yet, downloaded. `first` is
+    /// whether this is the first time the catalog was read.
+    IndexListsFetched {
+        first: bool,
+        fetched: Vec<(IndexEntry, Result<String, String>)>,
+    },
 }
 
 pub struct App {
@@ -208,6 +227,10 @@ pub struct App {
     saved_view: String,
     /// The location dropdown that's open, if any.
     open_dropdown: Option<location::Dropdown>,
+    /// Each filter tag's fade between grayed out (false) and not (true).
+    tag_fades: HashMap<String, Animation<bool>>,
+    /// The time the view is drawn at, for the fades.
+    now: Instant,
     tab: Tab,
     editor: Option<Editor>,
     /// Message and whether it is an error.
@@ -232,6 +255,8 @@ impl App {
             viewing_hidden: false,
             saved_view: String::new(),
             open_dropdown: None,
+            tag_fades: HashMap::new(),
+            now: Instant::now(),
             tab: Tab::Events,
             editor: None,
             status,
@@ -242,7 +267,48 @@ impl App {
             app.saved_view = view;
         }
         app.reload();
+        app.fade_tags();
         app
+    }
+
+    /// Starts tags fading to or from gray where whether they have results
+    /// changed. Tags seen for the first time start where they belong.
+    fn fade_tags(&mut self) {
+        self.now = Instant::now();
+        let in_results: HashSet<String> = self
+            .tags_in_results()
+            .into_iter()
+            .map(String::from)
+            .collect();
+        self.tag_fades.retain(|t, _| self.tags.contains(t));
+        for t in &self.tags {
+            let has = in_results.contains(t);
+            match self.tag_fades.get_mut(t) {
+                Some(fade) if fade.value() != has => fade.go_mut(has, self.now),
+                Some(_) => {}
+                None => {
+                    let fade = Animation::new(has).duration(TAG_FADE);
+                    self.tag_fades.insert(t.clone(), fade);
+                }
+            }
+        }
+    }
+
+    /// How far tag `t` is from grayed out (0) to not (1), right now.
+    pub fn tag_presence(&self, t: &str) -> f32 {
+        self.tag_fades
+            .get(t)
+            .map_or(1.0, |fade| fade.interpolate(0.0, 1.0, self.now))
+    }
+
+    /// The app as it starts: `new`, then a check of the list catalog for
+    /// lists to add.
+    pub fn boot(store: Store, status: Option<(String, bool)>) -> (Self, Task<Message>) {
+        let fetch = Task::perform(
+            lists::in_background(|| lists::read_location(lists::INDEX_URL)),
+            Message::IndexFetched,
+        );
+        (Self::new(store, status), fetch)
     }
 
     pub fn title(&self) -> String {
@@ -284,6 +350,34 @@ impl App {
             .iter()
             .filter(|g| self.hidden.contains(&g.id) && self.is_on(&g.list_id))
             .count()
+    }
+
+    /// Tags on the results the panel is showing, given every filter. Adding
+    /// one of these to the selected tags still leaves something to show; any
+    /// other tag would leave nothing. On the Lists panel, where filters don't
+    /// apply, it's the Events panel's results.
+    pub fn tags_in_results(&self) -> HashSet<&str> {
+        let mut tags = HashSet::new();
+        if self.tab == Tab::Groups {
+            let groups = (self.groups.iter())
+                .filter(|g| self.is_on(&g.list_id))
+                .filter(|g| self.filters.group(g, &self.hidden, self.viewing_hidden));
+            tags.extend(groups.flat_map(|g| &g.tags).map(String::as_str));
+        } else {
+            let mut seen = HashSet::new();
+            for occ in &self.occurrences {
+                if !seen.insert(occ.event) {
+                    continue;
+                }
+                let event = &self.events[occ.event];
+                let group = self.group(event.group_id.as_deref());
+                if self.filters.event(event, group, &self.hidden) {
+                    let group_tags = group.into_iter().flat_map(|g| &g.tags);
+                    tags.extend(event.tags.iter().chain(group_tags).map(String::as_str));
+                }
+            }
+        }
+        tags
     }
 
     pub fn group(&self, id: Option<&str>) -> Option<&Group> {
@@ -384,6 +478,7 @@ impl App {
         let tab = self.tab;
         let task = self.handle(message);
         self.save_view();
+        self.fade_tags();
         // A dropdown doesn't stay open across a change of panel or form.
         if self.tab != tab || self.editor.is_some() != was_editing {
             self.open_dropdown = None;
@@ -526,6 +621,12 @@ impl App {
             Message::Delete => self.delete(),
             Message::DismissStatus => self.status = None,
             Message::Key(key, modifiers) => return self.on_key(&key, modifiers),
+            // The time is taken in `update`, after every message.
+            Message::Frame => {}
+            Message::IndexFetched(result) => return self.index_fetched(result),
+            Message::IndexListsFetched { first, fetched } => {
+                self.install_index_lists(first, fetched)
+            }
             Message::Scroll(dy) => {
                 return operation::scroll_by(
                     MAIN_SCROLL,
@@ -534,6 +635,99 @@ impl App {
             }
         }
         Task::none()
+    }
+
+    /// Downloads the catalog's lists that should be added. Failing to reach
+    /// the catalog isn't worth interrupting anyone for; it's tried again on
+    /// the next launch. The first time it's read counts as the first launch,
+    /// even if an earlier launch was offline.
+    fn index_fetched(&mut self, result: Result<String, String>) -> Task<Message> {
+        let index = result.and_then(|json| ListIndex::parse(&json).map_err(|e| e.to_string()));
+        let index = match index {
+            Ok(index) => index,
+            Err(e) => {
+                eprintln!("list catalog: {e}");
+                return Task::none();
+            }
+        };
+        let first = matches!(self.store.setting(INDEX_READ), Ok(None));
+        if first && let Err(e) = self.store.set_setting(INDEX_READ, "1") {
+            eprintln!("list catalog: {e}");
+        }
+        let wanted: Vec<IndexEntry> = (index.lists.into_iter())
+            .filter(|e| self.store.wants(&e.id).unwrap_or(false))
+            .collect();
+        if wanted.is_empty() {
+            return Task::none();
+        }
+        Task::perform(
+            lists::in_background(move || {
+                (wanted.into_iter())
+                    .map(|e| {
+                        let json = lists::read_location(&e.url);
+                        (e, json)
+                    })
+                    .collect()
+            }),
+            move |fetched| Message::IndexListsFetched { first, fetched },
+        )
+    }
+
+    /// Adds the catalog's new lists. On the first launch they start on or off
+    /// as the catalog says; lists that appear in it later start off, so they
+    /// don't change what someone's used to seeing without asking.
+    fn install_index_lists(
+        &mut self,
+        first: bool,
+        fetched: Vec<(IndexEntry, Result<String, String>)>,
+    ) {
+        let (mut on, mut off, mut failed) = (Vec::new(), Vec::new(), Vec::new());
+        for (entry, json) in fetched {
+            let start_on = first && entry.default_on;
+            let installed = json.and_then(|json| {
+                let file = ListFile::parse(&json).map_err(|e| e.to_string())?;
+                (self.store)
+                    .install_from_index(&file, &entry.url, start_on)
+                    .map(|installed| (file.name, installed))
+                    .map_err(|e| e.to_string())
+            });
+            match installed {
+                Ok((name, Installed::Added)) if start_on => on.push(name),
+                Ok((name, Installed::Added)) => off.push(name),
+                Ok(_) => {}
+                Err(e) => failed.push(format!("Couldn't add “{}”: {e}", entry.name)),
+            }
+        }
+        if on.is_empty() && off.is_empty() && failed.is_empty() {
+            return;
+        }
+        self.reload();
+        let quoted = |names: &[String]| {
+            let names: Vec<String> = names.iter().map(|n| format!("“{n}”")).collect();
+            names.join(", ")
+        };
+        let mut parts = Vec::new();
+        if !on.is_empty() {
+            parts.push(format!("Added {} from the lists catalog.", quoted(&on)));
+        }
+        if !off.is_empty() && first {
+            parts.push(format!(
+                "Also added {}, turned off for now; turn them on in Lists.",
+                quoted(&off)
+            ));
+        } else if !off.is_empty() {
+            let (lists, they) = match off.len() {
+                1 => ("A new list was", "It's"),
+                _ => ("New lists were", "They're"),
+            };
+            parts.push(format!(
+                "{lists} added to the app: {}. {they} off for now; turn {} on in Lists.",
+                quoted(&off),
+                if off.len() == 1 { "it" } else { "them" },
+            ));
+        }
+        parts.extend(failed.iter().cloned());
+        self.status = Some((parts.join(" "), !failed.is_empty()));
     }
 
     fn list_name(&self, id: &str) -> String {
@@ -820,12 +1014,19 @@ impl App {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        keyboard::listen().filter_map(|event| match event {
+        let keys = keyboard::listen().filter_map(|event| match event {
             keyboard::Event::KeyPressed { key, modifiers, .. } => {
                 Some(Message::Key(key, modifiers))
             }
             _ => None,
-        })
+        });
+        // Redraw every frame only while something is fading.
+        let fading = (self.tag_fades.values()).any(|fade| fade.is_animating(self.now));
+        if fading {
+            Subscription::batch([keys, window::frames().map(|_| Message::Frame)])
+        } else {
+            keys
+        }
     }
 
     /// Keyboard shortcuts: Ctrl+E events, Ctrl+G groups, Ctrl+L lists, Ctrl+N
@@ -955,9 +1156,10 @@ impl App {
             ui::muted("No tags yet").into()
         } else {
             row(self.tags.iter().map(|t| {
-                ui::tag(
+                ui::filter_tag(
                     t,
                     self.filters.tags.contains(t),
+                    self.tag_presence(t),
                     Message::ToggleTag(t.clone()),
                 )
             }))
@@ -1060,6 +1262,142 @@ mod tests {
 
         let _ = app.update(Message::Lists(lists::Msg::SetOn(list.id.clone(), true)));
         assert_eq!(app.occurrences.len(), 1);
+    }
+
+    #[test]
+    fn catalog_lists_are_added_on_or_off() {
+        let file = |id: &str, name: &str| {
+            let mut source = Store::in_memory().unwrap();
+            let list = source.create_list(name).unwrap();
+            let mut file = source.export(&list.id).unwrap();
+            file.id = id.into();
+            file.to_json()
+        };
+        let entry = |id: &str, default_on: bool| IndexEntry {
+            id: id.into(),
+            name: id.into(),
+            description: String::new(),
+            region: "SanDiegoCounty".into(),
+            url: format!("https://x.org/{id}.json"),
+            default_on,
+        };
+        let mut app = App::new(Store::in_memory().unwrap(), None);
+        let _ = app.update(Message::IndexListsFetched {
+            first: true,
+            fetched: vec![
+                (entry("clubs", true), Ok(file("clubs", "Clubs"))),
+                (entry("meetup", false), Ok(file("meetup", "Meetup"))),
+                (entry("broken", true), Err("offline".into())),
+            ],
+        });
+        assert!(app.is_on("clubs"));
+        assert!(!app.is_on("meetup"));
+        assert!(app.list_infos.iter().all(|l| l.id != "broken"));
+        let (status, is_error) = app.status.clone().unwrap();
+        assert!(is_error);
+        assert!(status.contains("Added “Clubs”"), "{status}");
+        assert!(status.contains("“Meetup”, turned off"), "{status}");
+        assert!(
+            status.contains("Couldn't add “broken”: offline"),
+            "{status}"
+        );
+    }
+
+    #[test]
+    fn lists_new_to_the_catalog_after_the_first_launch_start_off() {
+        let mut app = App::new(Store::in_memory().unwrap(), None);
+        let index = r#"{"format": 1, "lists": []}"#;
+        let _ = app.update(Message::IndexFetched(Ok(index.into())));
+        assert_eq!(app.store.setting(INDEX_READ).unwrap().as_deref(), Some("1"));
+
+        let mut source = Store::in_memory().unwrap();
+        let list = source.create_list("Pickleball").unwrap();
+        let json = source.export(&list.id).unwrap().to_json();
+        let entry = IndexEntry {
+            id: list.id.clone(),
+            name: "Pickleball".into(),
+            description: String::new(),
+            region: String::new(),
+            url: "https://x.org/pickleball.json".into(),
+            default_on: true,
+        };
+        let _ = app.update(Message::IndexListsFetched {
+            first: false,
+            fetched: vec![(entry, Ok(json))],
+        });
+        assert!(!app.is_on(&list.id));
+        let (status, is_error) = app.status.clone().unwrap();
+        assert!(!is_error);
+        assert_eq!(
+            status,
+            "A new list was added to the app: “Pickleball”. It's off for now; turn it on in Lists."
+        );
+    }
+
+    #[test]
+    fn tags_in_results_follow_the_other_filters_and_panel() {
+        let mut store = Store::in_memory().unwrap();
+        let list = store.default_list().unwrap();
+        let mut g = Group::new(&list.id);
+        g.name = "Chess club".into();
+        g.tags = vec!["chess".into()];
+        store.save_group(&g).unwrap();
+        let tomorrow = recurrence::now_local() + TimeDelta::days(1);
+        let mut blitz = Event::new(&list.id, tomorrow);
+        blitz.title = "Blitz".into();
+        blitz.group_id = Some(g.id.clone());
+        blitz.tags = vec!["outdoors".into()];
+        store.save_event(&blitz).unwrap();
+        let mut trivia = Event::new(&list.id, tomorrow);
+        trivia.title = "Trivia".into();
+        trivia.tags = vec!["trivia".into()];
+        store.save_event(&trivia).unwrap();
+        let mut app = App::new(store, None);
+        let tags = |app: &App| {
+            let mut tags: Vec<String> = app
+                .tags_in_results()
+                .into_iter()
+                .map(String::from)
+                .collect();
+            tags.sort();
+            tags
+        };
+
+        assert_eq!(tags(&app), ["chess", "outdoors", "trivia"]);
+        let _ = app.update(Message::Search("blitz".into()));
+        assert_eq!(
+            tags(&app),
+            ["chess", "outdoors"],
+            "includes the group's tags"
+        );
+        let _ = app.update(Message::ToggleTag("trivia".into()));
+        assert!(
+            tags(&app).is_empty(),
+            "nothing matches, so every tag is grayed"
+        );
+
+        let _ = app.update(Message::ClearFilters);
+        let _ = app.update(Message::Tab(Tab::Groups));
+        assert_eq!(tags(&app), ["chess"]);
+    }
+
+    #[test]
+    fn tags_fade_when_they_gain_or_lose_results() {
+        let mut store = Store::in_memory().unwrap();
+        let list = store.default_list().unwrap();
+        let mut e = Event::new(&list.id, recurrence::now_local() + TimeDelta::days(1));
+        e.title = "Trivia".into();
+        e.tags = vec!["trivia".into()];
+        store.save_event(&e).unwrap();
+        let mut app = App::new(store, None);
+        assert_eq!(app.tag_presence("trivia"), 1.0, "starts where it belongs");
+        assert!(!app.tag_fades["trivia"].is_animating(app.now));
+
+        let _ = app.update(Message::Search("bingo".into()));
+        assert!(!app.tag_fades["trivia"].value());
+        assert!(app.tag_fades["trivia"].is_animating(app.now));
+        let later = app.now + TAG_FADE;
+        assert_eq!(app.tag_fades["trivia"].interpolate(0.0, 1.0, later), 0.0);
     }
 
     #[test]

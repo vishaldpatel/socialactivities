@@ -11,6 +11,11 @@ use sdsa_core::{ListFile, ListInfo};
 use crate::app::{App, Message};
 use crate::{focusable, ui};
 
+/// The catalog of published lists. Lists in it are added on launch, unless
+/// they're already installed or you removed them.
+pub const INDEX_URL: &str =
+    "https://vishaldpatel.github.io/social-group-and-event-lists/index.json";
+
 /// The largest list file accepted from a URL.
 const MAX_DOWNLOAD: u64 = 10 * 1024 * 1024;
 

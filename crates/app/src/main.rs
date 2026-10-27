@@ -101,7 +101,7 @@ fn main() -> iced::Result {
     iced::application(
         move || {
             let (store, status) = opened.take().expect("application booted twice");
-            app::App::new(store, status)
+            app::App::boot(store, status)
         },
         app::App::update,
         app::App::view,

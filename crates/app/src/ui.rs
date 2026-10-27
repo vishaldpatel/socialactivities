@@ -170,20 +170,62 @@ pub fn icon_button<'a, M: Clone + 'a>(
 
 /// A clickable tag chip; `selected` when it's part of the current search.
 pub fn tag<'a, M: Clone + 'a>(label: &str, selected: bool, on_press: M) -> Element<'a, M> {
+    filter_tag(label, selected, 1.0, on_press)
+}
+
+/// A tag in the search panel. One that wouldn't match anything right now is
+/// grayed out, but can still be picked. `presence` runs from grayed out (0)
+/// to normal (1), so the change can fade.
+pub fn filter_tag<'a, M: Clone + 'a>(
+    label: &str,
+    selected: bool,
+    presence: f32,
+    on_press: M,
+) -> Element<'a, M> {
     let chip = button(text(label.to_string()).size(12))
         .padding([2, 8])
         .style(move |theme: &Theme, status| {
-            let base = if selected {
-                button::primary(theme, status)
+            let palette = theme.extended_palette();
+            let (normal, grayed) = if selected {
+                let normal = button::primary(theme, status);
+                let grayed = button::Style {
+                    background: Some(palette.primary.weak.color.into()),
+                    text_color: palette.primary.weak.text,
+                    ..normal
+                };
+                (normal, grayed)
             } else {
-                gray(theme, status)
+                let normal = gray(theme, status);
+                let grayed = button::Style {
+                    text_color: palette.background.strongest.color,
+                    ..normal
+                };
+                (normal, grayed)
+            };
+            let background = |style: &button::Style| match style.background {
+                Some(iced::Background::Color(c)) => c,
+                _ => Color::TRANSPARENT,
             };
             button::Style {
+                background: Some(mix(background(&grayed), background(&normal), presence).into()),
+                text_color: mix(grayed.text_color, normal.text_color, presence),
                 border: iced::border::rounded(10),
-                ..base
+                ..normal
             }
         });
     crate::focusable::button(chip, on_press)
+}
+
+/// The color `t` of the way from `a` to `b`.
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    let t = t.clamp(0.0, 1.0);
+    let lerp = |x: f32, y: f32| x + (y - x) * t;
+    Color::from_rgba(
+        lerp(a.r, b.r),
+        lerp(a.g, b.g),
+        lerp(a.b, b.b),
+        lerp(a.a, b.a),
+    )
 }
 
 pub fn card<'a, M: 'a>(content: impl Into<Element<'a, M>>) -> Element<'a, M> {

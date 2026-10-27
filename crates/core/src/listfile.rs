@@ -286,9 +286,65 @@ impl EventRecord {
     }
 }
 
+/// A catalog of published lists, such as the one the app installs from on
+/// launch. Each entry points at a list file.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ListIndex {
+    pub format: u32,
+    #[serde(default)]
+    pub lists: Vec<IndexEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct IndexEntry {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// Which area the list covers, e.g. "SanDiegoCounty".
+    #[serde(default)]
+    pub region: String,
+    pub url: String,
+    /// Whether the list starts out on when it's first added. People can turn
+    /// it on or off themselves afterwards.
+    #[serde(default = "yes")]
+    pub default_on: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl ListIndex {
+    pub fn parse(json: &str) -> Result<Self, ListFileError> {
+        let index: ListIndex = serde_json::from_str(json)?;
+        if index.format > FORMAT {
+            return Err(ListFileError::TooNew(index.format));
+        }
+        Ok(index)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn index_entries_start_on_unless_they_say_otherwise() {
+        let index = ListIndex::parse(
+            r#"{"format": 1, "lists": [
+                {"id": "a", "name": "A", "url": "https://x.org/a.json"},
+                {"id": "b", "name": "B", "url": "https://x.org/b.json", "default_on": false}
+            ]}"#,
+        )
+        .unwrap();
+        let on: Vec<bool> = index.lists.iter().map(|e| e.default_on).collect();
+        assert_eq!(on, [true, false]);
+        assert!(matches!(
+            ListIndex::parse(r#"{"format": 99}"#),
+            Err(ListFileError::TooNew(99))
+        ));
+    }
 
     fn sample() -> (ListInfo, Vec<Group>, Vec<Event>) {
         let list = ListInfo {
