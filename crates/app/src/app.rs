@@ -58,16 +58,23 @@ impl std::fmt::Display for Bucket {
 /// How far ahead to list events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Horizon {
+    TenDays,
     Month,
     Quarter,
     Year,
 }
 
 impl Horizon {
-    pub const ALL: [Horizon; 3] = [Horizon::Month, Horizon::Quarter, Horizon::Year];
+    pub const ALL: [Horizon; 4] = [
+        Horizon::TenDays,
+        Horizon::Month,
+        Horizon::Quarter,
+        Horizon::Year,
+    ];
 
     fn days(self) -> i64 {
         match self {
+            Horizon::TenDays => 10,
             Horizon::Month => 30,
             Horizon::Quarter => 90,
             Horizon::Year => 365,
