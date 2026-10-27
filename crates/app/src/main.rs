@@ -3,6 +3,7 @@ mod calendar;
 mod focus;
 mod focusable;
 mod form;
+mod help;
 mod list;
 mod lists;
 mod location;

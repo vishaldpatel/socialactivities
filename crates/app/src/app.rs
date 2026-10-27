@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::time::Duration;
 
-use chrono::{NaiveTime, TimeDelta};
+use chrono::{DateTime, NaiveTime, TimeDelta, Utc};
 use iced::time::Instant;
 use iced::widget::operation;
 use iced::widget::{button, column, row, rule, scrollable, space, text_input};
@@ -15,7 +15,7 @@ use crate::form::{self, Editor, Record};
 use crate::lists::{self, Lists, UpdateState};
 use crate::location::{self, Area};
 use crate::{calendar, focus, focusable};
-use crate::{list, saved, search, ui};
+use crate::{help, list, saved, search, ui};
 
 /// The scroll area of whichever panel is showing on the right.
 pub const MAIN_SCROLL: &str = "main-scroll";
@@ -27,6 +27,15 @@ pub const RESULTS_START: &str = "results-start";
 /// Setting saying the lists catalog has been read before, so lists that
 /// appear in it later start off.
 const INDEX_READ: &str = "index_read";
+
+/// Setting holding when added lists were last checked for updates.
+const UPDATES_CHECKED: &str = "updates_checked_at";
+
+/// How often added lists are checked for updates without being asked.
+const UPDATE_EVERY: TimeDelta = TimeDelta::weeks(1);
+
+/// How long to wait before trying again when no list could be reached.
+const UPDATE_RETRY: TimeDelta = TimeDelta::hours(1);
 
 /// How long a tag takes to fade to or from gray.
 const TAG_FADE: Duration = Duration::from_millis(250);
@@ -193,6 +202,11 @@ pub enum Message {
     Key(keyboard::Key, keyboard::Modifiers),
     /// Scrolls the panel on the right by this much (negative is up).
     Scroll(f32),
+    /// Opens or closes the help panel.
+    Help(bool),
+    /// Added lists, downloaded by the weekly update check: each list's id and
+    /// what its update location returned.
+    AutoChecked(Vec<(String, Result<String, String>)>),
     /// A frame is being drawn while tags fade.
     Frame,
     /// The catalog of published lists, downloaded on launch.
@@ -227,6 +241,11 @@ pub struct App {
     saved_view: String,
     /// The location dropdown that's open, if any.
     open_dropdown: Option<location::Dropdown>,
+    /// When added lists are next due a check for updates; `None` while one is
+    /// running.
+    update_due: Option<DateTime<Utc>>,
+    /// The help panel is open.
+    help: bool,
     /// Each filter tag's fade between grayed out (false) and not (true).
     tag_fades: HashMap<String, Animation<bool>>,
     /// The time the view is drawn at, for the fades.
@@ -255,6 +274,8 @@ impl App {
             viewing_hidden: false,
             saved_view: String::new(),
             open_dropdown: None,
+            help: false,
+            update_due: None,
             tag_fades: HashMap::new(),
             now: Instant::now(),
             tab: Tab::Events,
@@ -268,7 +289,82 @@ impl App {
         }
         app.reload();
         app.fade_tags();
+        // Due now if lists have never been checked.
+        let checked = (app.store.setting(UPDATES_CHECKED).ok().flatten())
+            .and_then(|at| DateTime::parse_from_rfc3339(&at).ok());
+        app.update_due = Some(checked.map_or_else(Utc::now, |at| at.to_utc() + UPDATE_EVERY));
         app
+    }
+
+    /// Checks added lists for updates if a week has passed since the last
+    /// check. Called at launch and after every message, so a window left open
+    /// for days still gets its weekly check.
+    fn check_for_updates_if_due(&mut self) -> Task<Message> {
+        match self.update_due {
+            Some(due) if Utc::now() >= due => {}
+            _ => return Task::none(),
+        }
+        let added: Vec<(String, String)> = (self.list_infos.iter())
+            .filter(|l| !l.owned)
+            .filter_map(|l| Some((l.id.clone(), l.update_location()?.to_string())))
+            .collect();
+        if added.is_empty() {
+            self.updates_checked(Utc::now());
+            return Task::none();
+        }
+        self.update_due = None;
+        Task::perform(
+            lists::in_background(move || {
+                (added.into_iter())
+                    .map(|(id, location)| (id, lists::read_location(&location)))
+                    .collect()
+            }),
+            Message::AutoChecked,
+        )
+    }
+
+    fn updates_checked(&mut self, at: DateTime<Utc>) {
+        if let Err(e) = self.store.set_setting(UPDATES_CHECKED, &at.to_rfc3339()) {
+            eprintln!("update check: {e}");
+        }
+        self.update_due = Some(at + UPDATE_EVERY);
+    }
+
+    /// Applies what the weekly check found. Added lists are read-only, so
+    /// there's nothing of yours to lose; updates are applied straight away and
+    /// named in a message. Lists that couldn't be reached wait for next week,
+    /// unless none could, which usually means being offline.
+    fn apply_auto_check(&mut self, fetched: Vec<(String, Result<String, String>)>) {
+        let reached = fetched.iter().any(|(_, json)| json.is_ok());
+        let mut updated = Vec::new();
+        for (id, json) in fetched {
+            let file = json.and_then(|json| ListFile::parse(&json).map_err(|e| e.to_string()));
+            match file {
+                Ok(file) if file.id == id => match self.store.update_list(&file) {
+                    Ok(Installed::Replaced) => {
+                        self.lists.updates.remove(&id);
+                        updated.push(file.name);
+                    }
+                    Ok(_) => {}
+                    Err(e) => eprintln!("update check: {id}: {e}"),
+                },
+                Ok(file) => eprintln!("update check: {id} now holds “{}”", file.name),
+                Err(e) => eprintln!("update check: {id}: {e}"),
+            }
+        }
+        if reached {
+            self.updates_checked(Utc::now());
+        } else {
+            self.update_due = Some(Utc::now() + UPDATE_RETRY);
+        }
+        if !updated.is_empty() {
+            self.reload();
+            let names: Vec<String> = updated.iter().map(|n| format!("“{n}”")).collect();
+            self.info(format!(
+                "Updated {} to the latest version.",
+                names.join(", ")
+            ));
+        }
     }
 
     /// Starts tags fading to or from gray where whether they have results
@@ -308,7 +404,9 @@ impl App {
             lists::in_background(|| lists::read_location(lists::INDEX_URL)),
             Message::IndexFetched,
         );
-        (Self::new(store, status), fetch)
+        let mut app = Self::new(store, status);
+        let updates = app.check_for_updates_if_due();
+        (app, Task::batch([fetch, updates]))
     }
 
     pub fn title(&self) -> String {
@@ -477,6 +575,7 @@ impl App {
         let was_editing = self.editor.is_some();
         let tab = self.tab;
         let task = self.handle(message);
+        let task = Task::batch([task, self.check_for_updates_if_due()]);
         self.save_view();
         self.fade_tags();
         // A dropdown doesn't stay open across a change of panel or form.
@@ -623,6 +722,8 @@ impl App {
             Message::Key(key, modifiers) => return self.on_key(&key, modifiers),
             // The time is taken in `update`, after every message.
             Message::Frame => {}
+            Message::Help(open) => self.help = open,
+            Message::AutoChecked(fetched) => self.apply_auto_check(fetched),
             Message::IndexFetched(result) => return self.index_fetched(result),
             Message::IndexListsFetched { first, fetched } => {
                 self.install_index_lists(first, fetched)
@@ -1053,23 +1154,35 @@ impl App {
         if let keyboard::Key::Named(keyboard::key::Named::Tab) = key.as_ref() {
             return focus::step(!modifiers.shift());
         }
+        match key.as_ref() {
+            keyboard::Key::Named(keyboard::key::Named::F1) => {
+                self.help = !self.help;
+                return Task::none();
+            }
+            keyboard::Key::Named(keyboard::key::Named::Escape) if self.help => {
+                self.help = false;
+                return Task::none();
+            }
+            _ => {}
+        }
+        // While help is open, the arrows and Page Up/Down scroll it instead.
+        let scroll_id = if self.help { help::SCROLL } else { MAIN_SCROLL };
         // Scrolling the panel on the right. Text fields keep Home and End.
         if modifiers.is_empty()
             && let keyboard::Key::Named(named) = key.as_ref()
         {
             use keyboard::key::Named;
-            let scroll = |dy| {
-                operation::scroll_by(MAIN_SCROLL, scrollable::AbsoluteOffset { x: 0.0, y: dy })
-            };
+            let scroll =
+                |dy| operation::scroll_by(scroll_id, scrollable::AbsoluteOffset { x: 0.0, y: dy });
             match named {
                 Named::ArrowUp => return scroll(-LINE_SCROLL),
                 Named::ArrowDown => return scroll(LINE_SCROLL),
                 Named::PageUp => return scroll(-PAGE_SCROLL),
                 Named::PageDown => return scroll(PAGE_SCROLL),
                 Named::Home => {
-                    return operation::snap_to(MAIN_SCROLL, scrollable::RelativeOffset::START);
+                    return operation::snap_to(scroll_id, scrollable::RelativeOffset::START);
                 }
-                Named::End => return operation::snap_to_end(MAIN_SCROLL),
+                Named::End => return operation::snap_to_end(scroll_id),
                 _ => {}
             }
         }
@@ -1123,7 +1236,8 @@ impl App {
             );
         }
 
-        row![self.sidebar(), rule::vertical(1), content.push(main)].into()
+        let app = row![self.sidebar(), rule::vertical(1), content.push(main)].into();
+        if self.help { help::overlay(app) } else { app }
     }
 
     fn sidebar(&self) -> Element<'_, Message> {
@@ -1205,9 +1319,15 @@ impl App {
         .padding(16);
 
         // Lists are managed rarely, so they sit at the bottom, outside the scroll.
-        let footer = column![rule::horizontal(1), tab("Lists", Tab::Lists)]
-            .spacing(10)
-            .padding(iced::Padding::new(0.0).left(16).right(16).bottom(16));
+        // Help is needed rarely too, so it's a small button beside Lists.
+        let footer = column![
+            rule::horizontal(1),
+            row![tab("Lists", Tab::Lists), help::button_view()]
+                .spacing(8)
+                .align_y(iced::Center),
+        ]
+        .spacing(10)
+        .padding(iced::Padding::new(0.0).left(16).right(16).bottom(16));
 
         column![scrollable(sidebar).height(Fill), footer]
             .width(240)
@@ -1398,6 +1518,86 @@ mod tests {
         assert!(app.tag_fades["trivia"].is_animating(app.now));
         let later = app.now + TAG_FADE;
         assert_eq!(app.tag_fades["trivia"].interpolate(0.0, 1.0, later), 0.0);
+    }
+
+    #[test]
+    fn f1_opens_help_and_escape_closes_it() {
+        use keyboard::key::Named;
+        let mut app = App::new(Store::in_memory().unwrap(), None);
+        let press = |app: &mut App, key| {
+            let _ = app.update(Message::Key(
+                keyboard::Key::Named(key),
+                keyboard::Modifiers::empty(),
+            ));
+        };
+        press(&mut app, Named::F1);
+        assert!(app.help);
+        press(&mut app, Named::Escape);
+        assert!(!app.help);
+        let _ = app.update(Message::Help(true));
+        press(&mut app, Named::F1);
+        assert!(!app.help, "F1 closes it too");
+    }
+
+    /// A store with an added list from `https://x.org/l.json`, and that list
+    /// as published a day later.
+    fn added_list_and_newer_version() -> (Store, ListFile) {
+        let mut source = Store::in_memory().unwrap();
+        let list = source.create_list("Game Nights").unwrap();
+        let mut file = source.export(&list.id).unwrap();
+        file.update_url = Some("https://x.org/l.json".into());
+        let mut store = Store::in_memory().unwrap();
+        store.add_list(&file, None, false).unwrap();
+        file.updated_at += TimeDelta::days(1);
+        file.name = "Game Nights 2".into();
+        (store, file)
+    }
+
+    #[test]
+    fn weekly_check_applies_updates_and_waits_a_week() {
+        let (store, newer) = added_list_and_newer_version();
+        let mut app = App::new(store, None);
+        assert!(
+            app.update_due.unwrap() <= Utc::now(),
+            "never checked, so due"
+        );
+        let _ = app.check_for_updates_if_due();
+        assert_eq!(app.update_due, None, "running");
+
+        let _ = app.update(Message::AutoChecked(vec![(
+            newer.id.clone(),
+            Ok(newer.to_json()),
+        )]));
+        let info = app.list_infos.iter().find(|l| l.id == newer.id).unwrap();
+        assert_eq!(info.name, "Game Nights 2");
+        assert_eq!(
+            app.status,
+            Some((
+                "Updated “Game Nights 2” to the latest version.".into(),
+                false
+            ))
+        );
+        let due = app.update_due.unwrap();
+        assert!(due > Utc::now() + TimeDelta::days(6), "next week");
+
+        // A restart remembers when it last checked.
+        let app = App::new(app.store, None);
+        assert!(app.update_due.unwrap() > Utc::now() + TimeDelta::days(6));
+    }
+
+    #[test]
+    fn weekly_check_tries_again_soon_when_offline() {
+        let (store, newer) = added_list_and_newer_version();
+        let mut app = App::new(store, None);
+        let _ = app.check_for_updates_if_due();
+        let _ = app.update(Message::AutoChecked(vec![(
+            newer.id,
+            Err("offline".into()),
+        )]));
+        assert_eq!(app.status, None, "nothing to report");
+        let due = app.update_due.unwrap();
+        assert!(due < Utc::now() + TimeDelta::hours(2), "within the hour");
+        assert_eq!(app.store.setting(UPDATES_CHECKED).unwrap(), None);
     }
 
     #[test]

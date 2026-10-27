@@ -33,6 +33,7 @@ cargo test --workspace
 | Tab / Shift+Tab | Next / previous field, button, tag, checkbox or "By day"/"Next N days" dropdown (text is selected on arrival; the view scrolls to it) |
 | ↑ ↓ (or ← →) on a highlighted dropdown | Previous / next option |
 | Enter or Space on a highlighted button or checkbox | Press or toggle it |
+| F1 (or the "?" button beside Lists) | Open or close help; Esc also closes it |
 | Pick… (or ↓ in the date field) | Open the calendar: arrows move by day/week, Page Up/Down by month, Enter picks, Esc closes |
 
 The location dropdowns (search panel and forms) also take Tab: Up/Down step
@@ -76,7 +77,10 @@ database in the platform data dir (e.g.
 - **Added lists** come from a `.json` file or URL and are read-only. "Check for
   Updates" re-reads the list's update URL (or wherever it was added from) and
   offers the new version only if its `updated_at` is newer. A new version
-  without an update URL keeps the one already known. Your own events can
+  without an update URL keeps the one already known. Once a week (checked at
+  launch, and while the app is open) every added list is checked on its own
+  and newer versions are applied straight away, with a message naming them.
+  If none can be reached, it tries again an hour later. Your own events can
   still belong to their groups; they live in your list and survive updates.
 - **Choosing an event's group:** if the group is in a list you maintain, "Save
   to list" switches to that list and a note says so. If it isn't, a warning
