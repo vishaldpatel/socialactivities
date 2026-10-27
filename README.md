@@ -2,7 +2,7 @@
 
 A desktop app for browsing groups and events in San Diego County where you
 actually take part (hiking, volleyball, board games, language exchanges,
-dancing), as opposed to watching. See [spec.md](spec.md) for the original idea.
+dancing), as opposed to watching. 
 
 Built with Rust, [Iced](https://iced.rs) 0.14 and SQLite.
 
