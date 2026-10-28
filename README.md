@@ -6,6 +6,8 @@ dancing), as opposed to watching.
 
 Built with Rust, [Iced](https://iced.rs) 0.14 and SQLite.
 
+![The Events panel: upcoming run clubs and trivia nights for the day, with search, area, category and tag filters on the left](docs/screenshot.png)
+
 The app starts with the lists published at
 [vishaldpatel.github.io/social-group-and-event-lists](https://vishaldpatel.github.io/social-group-and-event-lists/):
 run clubs, game nights, group classes, cars & coffee meetups and more. Some
