@@ -4,8 +4,6 @@ A desktop app for browsing groups and events in San Diego County where you
 actually take part (hiking, volleyball, board games, language exchanges,
 dancing), as opposed to watching. 
 
-Built with Rust, [Iced](https://iced.rs) 0.14 and SQLite.
-
 ![The Events panel: upcoming run clubs and trivia nights for the day, with search, area, category and tag filters on the left](docs/screenshot.png)
 
 The app starts with the lists published at
@@ -14,14 +12,6 @@ run clubs, game nights, group classes, cars & coffee meetups and more. Some
 start out turned off; switch them on in Lists. To add a list from anywhere
 else, paste its link into Lists → Add from URL, or download it and add the
 file. Made a list of your own? Export it and share it there.
-
-## Running
-
-```sh
-mise install            # installs the Rust toolchain pinned in mise.toml
-cargo run -p sdsa       # optionally: -- --user PATH to use another database
-cargo test --workspace
-```
 
 ## Installing
 
@@ -40,25 +30,6 @@ older versions are on the
 | Other Linux | [.tar.gz](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-linux-x86_64.tar.gz) | Unpack it and run `sdsa`. |
 
 The warnings on Windows and macOS are because the app isn't code-signed.
-
-## Releasing
-
-`.github/workflows/release.yml` builds every package above.
-
-1. Copy the hosted run clubs list over `data/defaults.json` (see
-   [Curating the built-in list](#curating-the-built-in-list)).
-2. Bump `version` in the root `Cargo.toml`, run `cargo build` so
-   `Cargo.lock` follows, and commit.
-3. `git tag v0.2.0 && git push origin v0.2.0` (the tag must match the version).
-4. When the workflow finishes, a draft release with all the files is waiting
-   on the Releases page. Check it, edit the notes, and publish.
-   The download links in [Installing](#installing) point at the newest
-   published release, so they need no changes.
-
-Actions → Release → Run workflow builds everything without releasing, to try
-changes to the packaging. Packaging files live in `packaging/`; after editing
-`packaging/icon.svg`, run `packaging/make-icons.sh` (needs `rsvg-convert` and
-ImageMagick) and commit the results.
 
 ## Keyboard
 
@@ -94,15 +65,6 @@ to see what turns up.
 
 Your filters (area, categories, tags) and the Events panel's grouping and
 range are remembered between runs, in your database. The search text isn't.
-
-## Layout
-
-```
-crates/core          sdsa-core: model, SQLite storage, list files, recurrence (no UI)
-crates/app           sdsa: the Iced desktop app
-data/defaults.json   the built-in list (run clubs) compiled into the app
-packaging/           icons, desktop file, Info.plist, installer and PKGBUILD for releases
-```
 
 ## Lists
 
@@ -169,3 +131,41 @@ The run clubs list is maintained on the [lists site](https://vishaldpatel.github
    Edit) set to the hosted file, so everyone's copy keeps updating from there.
 4. Before a release, copy the hosted file over `data/defaults.json` so new
    installs start with the latest version.
+
+## Development
+
+Built with Rust, [Iced](https://iced.rs) 0.14 and SQLite.
+
+```sh
+mise install            # installs the Rust toolchain pinned in mise.toml
+cargo run -p sdsa       # optionally: -- --user PATH to use another database
+cargo test --workspace
+```
+
+## Layout
+
+```
+crates/core          sdsa-core: model, SQLite storage, list files, recurrence (no UI)
+crates/app           sdsa: the Iced desktop app
+data/defaults.json   the built-in list (run clubs) compiled into the app
+packaging/           icons, desktop file, Info.plist, installer and PKGBUILD for releases
+```
+
+## Releasing
+
+`.github/workflows/release.yml` builds every package in [Installing](#installing).
+
+1. Copy the hosted run clubs list over `data/defaults.json` (see
+   [Curating the built-in list](#curating-the-built-in-list)).
+2. Bump `version` in the root `Cargo.toml`, run `cargo build` so
+   `Cargo.lock` follows, and commit.
+3. `git tag v0.2.0 && git push origin v0.2.0` (the tag must match the version).
+4. When the workflow finishes, a draft release with all the files is waiting
+   on the Releases page. Check it, edit the notes, and publish.
+   The download links in [Installing](#installing) point at the newest
+   published release, so they need no changes.
+
+Actions → Release → Run workflow builds everything without releasing, to try
+changes to the packaging. Packaging files live in `packaging/`; after editing
+`packaging/icon.svg`, run `packaging/make-icons.sh` (needs `rsvg-convert` and
+ImageMagick) and commit the results.
