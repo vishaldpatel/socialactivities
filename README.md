@@ -25,17 +25,19 @@ cargo test --workspace
 
 ## Installing
 
-Download the file for your system from the
-[Releases page](https://github.com/vishaldpatel/socialactivities/releases):
+Download the file for your system. These links always get the
+[latest release](https://github.com/vishaldpatel/socialactivities/releases/latest);
+older versions are on the
+[Releases page](https://github.com/vishaldpatel/socialactivities/releases).
 
-| System | File | Install |
+| System | Download | Install |
 |---|---|---|
-| Windows | `…-windows-x64-setup.exe` | Run it. Windows may say "Windows protected your PC": choose **More info → Run anyway**. Or use the portable `.zip`. |
-| macOS | `…-macos-universal.dmg` | Open it and drag the app to Applications. The first time, macOS refuses to open it: go to **System Settings → Privacy & Security** and press **Open Anyway**. |
-| Debian, Ubuntu, Mint | `….deb` | `sudo apt install ./sd-social-activities_*.deb` |
-| Fedora, openSUSE | `….rpm` | `sudo dnf install ./sd-social-activities-*.rpm` (openSUSE: `sudo zypper install`) |
-| Arch, Manjaro | `….pkg.tar.zst` | `sudo pacman -U sd-social-activities-*.pkg.tar.zst` |
-| Other Linux | `…-linux-x86_64.tar.gz` | Unpack it and run `sdsa`. |
+| Windows | [Installer](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-windows-x64-setup.exe) or [portable .zip](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-windows-x64-portable.zip) | Run the installer. Windows may say "Windows protected your PC": choose **More info → Run anyway**. |
+| macOS (Apple Silicon and Intel) | [.dmg](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-macos-universal.dmg) | Open it and drag the app to Applications. The first time, macOS refuses to open it: go to **System Settings → Privacy & Security** and press **Open Anyway**. |
+| Debian, Ubuntu, Mint | [.deb](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-amd64.deb) | `sudo apt install ./sd-social-activities-amd64.deb` |
+| Fedora, openSUSE | [.rpm](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-x86_64.rpm) | `sudo dnf install ./sd-social-activities-x86_64.rpm` (openSUSE: `sudo zypper install`) |
+| Arch, Manjaro | [.pkg.tar.zst](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-x86_64.pkg.tar.zst) | `sudo pacman -U sd-social-activities-x86_64.pkg.tar.zst` |
+| Other Linux | [.tar.gz](https://github.com/vishaldpatel/socialactivities/releases/latest/download/sd-social-activities-linux-x86_64.tar.gz) | Unpack it and run `sdsa`. |
 
 The warnings on Windows and macOS are because the app isn't code-signed.
 
@@ -50,6 +52,8 @@ The warnings on Windows and macOS are because the app isn't code-signed.
 3. `git tag v0.2.0 && git push origin v0.2.0` (the tag must match the version).
 4. When the workflow finishes, a draft release with all the files is waiting
    on the Releases page. Check it, edit the notes, and publish.
+   The download links in [Installing](#installing) point at the newest
+   published release, so they need no changes.
 
 Actions → Release → Run workflow builds everything without releasing, to try
 changes to the packaging. Packaging files live in `packaging/`; after editing

@@ -175,6 +175,19 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Add copies without the version
+        # So the README can link to releases/latest/download/<name>, which
+        # always gets the newest release's file.
+        run: |
+          v=${{ needs.linux.outputs.version }}
+          cd dist
+          cp sd-social-activities-$v-windows-x64-setup.exe sd-social-activities-windows-x64-setup.exe
+          cp sd-social-activities-$v-windows-x64-portable.zip sd-social-activities-windows-x64-portable.zip
+          cp sd-social-activities-$v-macos-universal.dmg sd-social-activities-macos-universal.dmg
+          cp sd-social-activities_$v-1_amd64.deb sd-social-activities-amd64.deb
+          cp sd-social-activities-$v-1.x86_64.rpm sd-social-activities-x86_64.rpm
+          cp sd-social-activities-$v-1-x86_64.pkg.tar.zst sd-social-activities-x86_64.pkg.tar.zst
+          cp sd-social-activities-$v-linux-x86_64.tar.gz sd-social-activities-linux-x86_64.tar.gz
       - uses: softprops/action-gh-release@v3
         with:
           draft: true
